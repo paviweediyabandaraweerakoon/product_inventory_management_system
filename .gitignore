@@ -1,0 +1,11 @@
+# Logs
+storage/logs/
+
+# Uploads
+storage/uploads/
+
+# Vendor
+/vendor/
+
+# Environment
+.env
