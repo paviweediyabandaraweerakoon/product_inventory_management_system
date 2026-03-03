@@ -1,8 +1,14 @@
 <?php
+// Autoloading (PSR-4 use)
+require_once __DIR__ . '/../vendor/autoload.php';
 
-require __DIR__ . '/../vendor/autoload.php';
+use App\Core\Router;
 
-use App\Core\Application;
+// Initialize Router  
+$router = new Router();
 
-$app = new Application();
-$app->run();
+// Load Routes
+require_once __DIR__ . '/../routes/web.php';
+
+// Start Engine
+$router->resolve();
