@@ -1,5 +1,5 @@
 <?php
-// routes/web.php path eke thiyena file eka
+// routes/web.php path 
 
 use App\Controllers\ProductController;
 use App\Controllers\DashboardController;
