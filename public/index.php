@@ -1,4 +1,7 @@
 <?php
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
 // register custom autoloader in case composer isn't installed yet
 require_once __DIR__ . '/../app/Core/Autoloader.php';
 \App\Core\Autoloader::register();
