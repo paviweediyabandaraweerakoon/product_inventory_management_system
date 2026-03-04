@@ -9,8 +9,7 @@ class Database {
     private $connection;
 
     private function __construct() {
-        //load database configuration from .env file.
-        
+        // Load database configuration using Env class
         $host = Env::get('DB_HOST', '127.0.0.1');
         $db   = Env::get('DB_DATABASE', 'product_inventory_management_system');
         $user = Env::get('DB_USERNAME', 'root');
