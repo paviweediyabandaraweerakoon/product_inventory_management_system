@@ -8,14 +8,15 @@ class Product extends Model
 {
     protected $table = 'products';
 
-    /**
-     * Get all products with pagination and search (Prepared, safe binds)
-     */
-    public function getAll($limit, $offset, $search = '')
+    
+    //Get all products with pagination and search
+     
+    public function getAll($limit = 20, $offset = 0, $search = '')
     {
+        
         $sql = "SELECT p.*, c.category_name 
                 FROM products p 
-                LEFT JOIN categories c ON p.category_id = c.id 
+                INNER JOIN categories c ON p.category_id = c.id 
                 WHERE p.deleted_at IS NULL";
 
         if (!empty($search)) {
@@ -35,9 +36,6 @@ class Product extends Model
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Return total count with optional search
-     */
     public function getCount($search = '')
     {
         $sql = "SELECT COUNT(*) FROM products WHERE deleted_at IS NULL";
@@ -51,30 +49,56 @@ class Product extends Model
         $stmt->execute();
         return (int)$stmt->fetchColumn();
     }
-
-    /**
-     * Find product with category by id
-     */
+    
+     //Find product by id
+     
     public function findById($id)
     {
         $stmt = $this->db->prepare("SELECT p.*, c.category_name FROM products p 
-                LEFT JOIN categories c ON p.category_id = c.id 
+                INNER JOIN categories c ON p.category_id = c.id 
                 WHERE p.id = ? AND p.deleted_at IS NULL");
         $stmt->execute([$id]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Alias for compatibility with controllers
-     */
     public function find($id)
     {
         return $this->findById($id);
     }
 
-    /**
-     * Generic insert and return ID
-     */
+    
+     // Stock  update method
+    
+    public function updateStock($id, $newStock)
+    {
+        $stmt = $this->db->prepare("UPDATE {$this->table} SET stock_quantity = ? WHERE id = ?");
+        return $stmt->execute([$newStock, $id]);
+    }
+
+    
+     //Inventory update
+     
+    public function updateStockWithTransaction($productId, $type, $qty, $reason, $userId) {
+        $product = $this->find($productId);
+        if (!$product) throw new \Exception("Product not found.");
+
+        $currentStock = (int)$product['stock_quantity'];
+        
+        // Stock count in Model
+        $newStock = ($type === 'IN') ? ($currentStock + $qty) : ($currentStock - $qty);
+
+        if ($newStock < 0) {
+            throw new \Exception("Insufficient stock! Current stock: $currentStock");
+        }
+
+        // 1. In Product Table update stock
+        $this->updateStock($productId, $newStock);
+        
+        // 2. Note Transaction in InventoryTransaction Table
+        $transactionModel = new \App\Models\InventoryTransaction();
+        $transactionModel->log($productId, $type, $qty, $reason, $userId);
+    }
+
     public function insert($data)
     {
         $columns = implode(', ', array_keys($data));
@@ -86,9 +110,6 @@ class Product extends Model
         return $this->db->lastInsertId();
     }
 
-    /**
-     * Update existing product
-     */
     public function updateProduct($id, $data)
     {
         $fields = "";
@@ -105,9 +126,6 @@ class Product extends Model
         return $stmt->execute($values);
     }
 
-    /**
-     * Soft delete
-     */
     public function deleteProduct($id)
     {
         $stmt = $this->db->prepare("UPDATE {$this->table} SET deleted_at = NOW() WHERE id = ?");
@@ -117,14 +135,5 @@ class Product extends Model
     public function generateSKU($categoryId)
     {
         return "PRD-" . strtoupper(substr(uniqid(), 7));
-    }
-    
-    /**
-     * Update only stock quantity
-     */
-    public function updateStock($id, $newQuantity)
-    {
-        $stmt = $this->db->prepare("UPDATE {$this->table} SET stock_quantity = ? WHERE id = ?");
-        return $stmt->execute([$newQuantity, $id]);
     }
 }
