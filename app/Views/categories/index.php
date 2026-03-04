@@ -39,8 +39,9 @@
                     <i data-lucide="package" class="size-3.5"></i>
                     <span class="text-xs font-bold"><?= $cat['productCount'] ?> Products</span>
                 </div>
-                <span class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider <?= ($cat['status'] ?? 'active') === 'active' ? 'text-green-500' : 'text-gray-400' ?>">
-                    <span class="size-2 rounded-full <?= ($cat['status'] ?? 'active') === 'active' ? 'bg-green-500 animate-pulse' : 'bg-gray-300' ?>"></span>
+                
+                <span class="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider <?= ($cat['status'] ?? 'active') === 'active' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600' ?>">
+                    <span class="size-1.5 rounded-full <?= ($cat['status'] ?? 'active') === 'active' ? 'bg-green-500 animate-pulse' : 'bg-red-500' ?>"></span>
                     <?= $cat['status'] ?? 'active' ?>
                 </span>
             </div>

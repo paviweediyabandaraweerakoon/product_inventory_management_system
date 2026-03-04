@@ -2,15 +2,18 @@
 namespace App\Models;
 
 use App\Core\Model;
+use App\Core\Database; 
 use PDO;
 
 class Category extends Model {
     protected $table = 'categories';
+    protected $db; 
 
-    /**
-     * Get all categories with product count
-     * Assignment Requirement: Database Interaction
-     */
+    public function __construct() {
+        
+        $this->db = Database::getInstance()->getConnection();
+    }
+
     public function getAll() {
         $sql = "SELECT c.*, COUNT(p.id) as productCount 
                 FROM {$this->table} c 
@@ -22,10 +25,6 @@ class Category extends Model {
         return $this->db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Find a single category by ID
-     * Assignment Requirement: PDO Prepared Statements
-     */
     public function find($id) {
         $sql = "SELECT * FROM {$this->table} WHERE id = :id AND deleted_at IS NULL LIMIT 1";
         $stmt = $this->db->prepare($sql);
@@ -33,9 +32,6 @@ class Category extends Model {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    /**
-     * Create a new category
-     */
     public function create($data) {
         $sql = "INSERT INTO {$this->table} (category_name, description, status, created_by) 
                 VALUES (:category_name, :description, :status, :created_by)";
@@ -49,10 +45,6 @@ class Category extends Model {
         ]);
     }
 
-    /**
-     * Update an existing category
-     * Assignment Requirement: OOP concepts
-     */
     public function update($id, $data) {
         $sql = "UPDATE {$this->table} 
                 SET category_name = :category_name, 
@@ -70,10 +62,6 @@ class Category extends Model {
         ]);
     }
 
-    /**
-     * Soft delete a category
-     * Assignment Requirement: Database design standards
-     */
     public function delete($id) {
         $sql = "UPDATE {$this->table} SET deleted_at = CURRENT_TIMESTAMP WHERE id = :id";
         $stmt = $this->db->prepare($sql);

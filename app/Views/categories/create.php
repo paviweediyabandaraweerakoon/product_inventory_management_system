@@ -27,6 +27,15 @@
             <p id="descError" class="mt-2 text-xs text-red-500 hidden font-medium">Description should be at least 10 characters.</p>
         </div>
 
+        <div>
+            <label class="block text-sm font-bold text-gray-700 mb-2">Status <span class="text-red-500">*</span></label>
+            <select id="catStatus" name="status" required 
+                    class="w-full rounded-xl border border-gray-200 px-4 py-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all bg-white cursor-pointer">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+        </div>
+
         <div class="grid grid-cols-2 gap-4 pt-4">
             <a href="/categories" class="flex items-center justify-center px-6 py-3 border border-gray-200 rounded-xl font-bold text-gray-500 hover:bg-gray-50 transition-all">Cancel</a>
             <button type="submit" class="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/25 hover:opacity-90 transition-all">
@@ -43,6 +52,7 @@ document.getElementById('catForm').onsubmit = function(e) {
     const name = document.getElementById('catName').value;
     const desc = document.getElementById('catDesc').value;
 
+    // Name validation
     if (name.trim().length < 3) {
         document.getElementById('nameError').classList.remove('hidden');
         valid = false;
@@ -50,7 +60,8 @@ document.getElementById('catForm').onsubmit = function(e) {
         document.getElementById('nameError').classList.add('hidden');
     }
 
-    if (desc.trim().length < 10) {
+    // Description validation (Description එක අනිවාර්ය කරලා නැත්නම් විතරක් මේක use කරන්න)
+    if (desc.trim().length > 0 && desc.trim().length < 10) {
         document.getElementById('descError').classList.remove('hidden');
         valid = false;
     } else {

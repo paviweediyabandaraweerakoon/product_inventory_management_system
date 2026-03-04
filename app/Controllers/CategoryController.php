@@ -3,42 +3,39 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Models\Category;
+use App\Requests\CategoryRequest; // Class for Validation
 
 class CategoryController extends Controller {
     
-    // 1. View all categories
+    // 1. show all categories
     public function index() {
         $model = new Category();
         $categories = $model->getAll();
         return $this->view('categories/index', ['categories' => $categories]);
     }
 
-    // 2. Show Create Form
+    // 2. Show create category form
     public function create() {
         return $this->view('categories/create');
     }
 
-    // 3. Store New Category (with Validation)
+    // 3. Save new category to database
     public function store() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $model = new Category();
-
-            // --- Server-side Validation---
-            $name = trim($_POST['category_name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            $status = $_POST['status'] ?? 'active';
-
-            if (empty($name) || strlen($name) < 3) {
-                // In real world, this one back with error message.
-                header('Location: /categories/create?error=name_too_short');
+            $request = new CategoryRequest();
+            
+            // Validation Check
+            if (!$request->validate($_POST)) {
+                header('Location: /categories/create?error=invalid');
                 exit;
             }
 
+            $model = new Category();
             $model->create([
-                'category_name' => htmlspecialchars($name),
-                'description'   => htmlspecialchars($description),
-                'status'        => $status,
-                'created_by'    => $_SESSION['user_id'] ?? 1 // no Session, this temperary
+                'category_name' => htmlspecialchars(trim($_POST['category_name'])),
+                'description'   => htmlspecialchars(trim($_POST['description'] ?? '')),
+                'status'        => $_POST['status'] ?? 'active',
+                'created_by'    => $_SESSION['user_id'] ?? 1 // temporary user_id for created_by field, replace with actual user session data in real implementation
             ]);
 
             header('Location: /categories?success=created');
@@ -46,7 +43,7 @@ class CategoryController extends Controller {
         }
     }
 
-    // 4. Show Edit Form
+    // 4. Show edit form with existing category data
     public function edit($id) {
         $model = new Category();
         $category = $model->find($id);
@@ -55,25 +52,25 @@ class CategoryController extends Controller {
             header('Location: /categories?error=not_found');
             exit;
         }
-
+        // Send $category array to the view
         return $this->view('categories/edit', ['category' => $category]);
     }
 
-    // 5. Update Existing Category
+    // 5. Update category data in database
     public function update($id) {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $model = new Category();
+            $request = new CategoryRequest();
 
-            // Validation
-            $name = trim($_POST['category_name'] ?? '');
-            if (empty($name) || strlen($name) < 3) {
+            // Validation Check
+            if (!$request->validate($_POST)) {
                 header("Location: /categories/edit/$id?error=invalid");
                 exit;
             }
 
+            $model = new Category();
             $model->update($id, [
-                'category_name' => htmlspecialchars($name),
-                'description'   => htmlspecialchars($_POST['description']),
+                'category_name' => htmlspecialchars(trim($_POST['category_name'])),
+                'description'   => htmlspecialchars(trim($_POST['description'] ?? '')),
                 'status'        => $_POST['status']
             ]);
 
@@ -82,12 +79,10 @@ class CategoryController extends Controller {
         }
     }
 
-    // 6. Delete Category (Soft Delete or Hard Delete)
+    // 6. Soft delete category
     public function delete($id) {
         $model = new Category();
-        // Soft delete - set deleted_at timestamp (if implemented in model)
         $model->delete($id); 
-        
         header('Location: /categories?success=deleted');
         exit;
     }
