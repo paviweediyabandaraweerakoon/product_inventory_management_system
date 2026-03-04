@@ -1,0 +1,9 @@
+{
+    "name": "yourname/inventory-system",
+    "description": "Product Inventory Management System",
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}
