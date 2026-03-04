@@ -24,7 +24,7 @@
             <div class="flex items-start justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-600">Total Products</p>
-                    <p class="mt-2 text-3xl font-bold text-gray-900">1,234</p>
+                    <p class="mt-2 text-3xl font-bold text-gray-900"><?= $totalProducts ?></p>
                     <div class="mt-3 flex items-center gap-2">
                         <div class="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-600">
                             <i data-lucide="arrow-up-right" class="size-3"></i>
@@ -111,17 +111,31 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
-                        <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="px-6 py-4">
-                                <div class="font-medium text-gray-900">Wireless Headphones</div>
-                                <div class="text-xs text-gray-500">WH-2024-001</div>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-600 font-semibold">45</td>
-                            <td class="px-6 py-4 text-sm font-bold text-gray-900">$89.99</td>
-                            <td class="px-6 py-4">
-                                <span class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">In Stock</span>
-                            </td>
-                        </tr>
+                        <?php if (!empty($recentProducts)): ?>
+                            <?php foreach ($recentProducts as $product): ?>
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4">
+                                        <div class="font-medium text-gray-900"><?= htmlspecialchars($product['product_name']) ?></div>
+                                        <div class="text-xs text-gray-500"><?= htmlspecialchars($product['sku']) ?></div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-600 font-semibold"><?= htmlspecialchars($product['stock_quantity']) ?></td>
+                                    <td class="px-6 py-4 text-sm font-bold text-gray-900">$<?= number_format($product['price'] ?? $product['unit_price'] ?? 0, 2) ?></td>
+                                    <td class="px-6 py-4">
+                                        <?php if (($product['stock_quantity'] ?? 0) > 10): ?>
+                                            <span class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">In Stock</span>
+                                        <?php elseif (($product['stock_quantity'] ?? 0) > 0): ?>
+                                            <span class="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-800">Low Stock</span>
+                                        <?php else: ?>
+                                            <span class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">Out of Stock</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td class="px-6 py-4" colspan="4">No recent products.</td>
+                            </tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>

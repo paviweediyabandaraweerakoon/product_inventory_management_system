@@ -3,7 +3,7 @@
 return [
     'db' => [
         'host' => 'localhost',
-        'name' => 'inventory',
+        'name' => 'product_inventory_management_system',
         'user' => 'root',
         'pass' => '',
     ],
