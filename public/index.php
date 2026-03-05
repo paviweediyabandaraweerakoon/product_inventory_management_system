@@ -3,16 +3,25 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use App\Core\Env;
 use App\Core\Router;
+use App\Controllers\DashboardController;
+use App\Controllers\CategoryController;
 
-// Load environment variables
+// 1. Load environment variables
 Env::load(__DIR__ . '/../.env');
 
+// 2. Initialize Router
 $router = new Router();
-// Routes temprary
-$router->add('GET', '/', 'DashboardController@index');
 
-$method = $_SERVER['REQUEST_METHOD'];
-$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$uri = str_replace('/product_inventory_management_system/public', '', $uri);
+// 3. Define Routes
+$router->get('/', [DashboardController::class, 'index']);
 
-$router->handle($method, $uri);
+// Category Routes
+$router->get('/categories', [CategoryController::class, 'index']);
+$router->get('/categories/create', [CategoryController::class, 'create']);
+$router->post('/categories/store', [CategoryController::class, 'store']);
+$router->get('/categories/edit/{id}', [CategoryController::class, 'edit']);
+$router->post('/categories/update/{id}', [CategoryController::class, 'update']);
+$router->get('/categories/delete/{id}', [CategoryController::class, 'delete']);
+
+// 4. Resolve the route
+$router->resolve();
