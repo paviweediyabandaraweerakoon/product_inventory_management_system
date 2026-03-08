@@ -15,7 +15,7 @@
         <div class="lg:col-span-2 space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div class="grid md:grid-cols-2 gap-8">
-                    <img src="/assets/images/products/<?= $product['image_path'] ?>" class="w-full rounded-xl border object-cover">
+                    <img src="/uploads/products/<?= $product['image_path'] ?>" class="w-full rounded-xl border object-cover">
                     
                     <div class="space-y-4">
                         <h2 class="text-2xl font-bold"><?= htmlspecialchars($product['product_name']) ?></h2>
@@ -57,6 +57,3 @@
         </div>
     </div>
 </div>
-
-<script src="https://unpkg.com/lucide@latest"></script>
-<script>lucide.createIcons();</script>

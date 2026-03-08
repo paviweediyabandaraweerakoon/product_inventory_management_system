@@ -58,7 +58,7 @@
             <div class="col-span-2 py-4 border-t border-gray-50 mt-4">
                 <label class="text-sm font-semibold text-gray-700 block mb-4">Product Image</label>
                 <div class="flex items-center gap-6 p-4 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                    <img src="/public/uploads/products/<?= $product['image_path'] ?>" class="w-24 h-24 rounded-xl object-cover shadow-sm bg-white border border-gray-100">
+                    <img src="/uploads/products/<?= $product['image_path'] ?>" class="w-24 h-24 rounded-xl object-cover shadow-sm bg-white border border-gray-100">
                     <div class="space-y-1">
                         <input type="file" name="image" class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                         <p class="text-xs text-gray-400">Current: <?= $product['image_path'] ?>. Upload new to change.</p>
@@ -77,6 +77,3 @@
         </div>
     </form>
 </div>
-
-<script src="https://unpkg.com/lucide@latest"></script>
-<script>lucide.createIcons();</script>

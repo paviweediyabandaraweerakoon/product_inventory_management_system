@@ -5,26 +5,22 @@ use App\Core\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
+use App\Requests\ProductRequest;
 
 class ProductController extends Controller
 {
-    /**
-     * List View with Search & Pagination
-     */
     public function index()
     {
         $productModel = new Product();
         $search = $_GET['search'] ?? '';
         $page = (int)($_GET['page'] ?? 1);
-        $limit = 5;
+        $limit = 10;
         $offset = ($page - 1) * $limit;
-
-        $products = $productModel->getAll($limit, $offset, $search);
         $total = $productModel->getCount($search);
 
         return $this->view('products/index', [
-            'products' => $products,
-            'total' => $total,
+            'products' => $productModel->getAll($limit, $offset, $search),
+            'totalProducts' => $total,
             'currentPage' => $page,
             'totalPages' => ceil($total / $limit),
             'search' => $search
@@ -33,14 +29,11 @@ class ProductController extends Controller
 
     public function create()
     {
-        $categoryModel = new Category();
-        $categories = $categoryModel->all();
-        return $this->view('products/create', ['categories' => $categories]);
+        return $this->view('products/create', [
+            'categories' => (new Category())->all()
+        ]);
     }
 
-    /**
-     * Store Product & Log Transaction
-     */
     public function store()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -48,77 +41,78 @@ class ProductController extends Controller
             return;
         }
 
-        $errors = [];
+        $validation = new ProductRequest($_POST, $_FILES);
+        $errors = $validation->validate() ? [] : $validation->getErrors();
         $productModel = new Product();
         $transactionModel = new InventoryTransaction();
+        $db = $productModel->getConnection();
 
-        // 1. Validation
-        if (empty($_POST['product_name']) || strlen($_POST['product_name']) < 3) {
-            $errors['product_name'] = "Name is required (min 3 chars)";
-        }
-        if (floatval($_POST['price'] ?? 0) <= 0) {
-            $errors['price'] = "Price must be positive";
-        }
-
-        // 2. Secure Image Upload (Requirement 5.2 & 6)
         $imagePath = 'default-prod.png';
-        if (!empty($_FILES['image']['name'])) {
-            $file = $_FILES['image'];
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $allowed = ['jpg', 'jpeg', 'png'];
-
-            // MIME Type Validation
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mime = finfo_file($finfo, $file['tmp_name']);
-            finfo_close($finfo);
-
-            if (in_array($ext, $allowed) && strpos($mime, 'image/') === 0 && $file['size'] < 5000000) {
-                $uploadDir = "public/uploads/products/";
-                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-                
-                $imagePath = uniqid('PROD_', true) . '.' . $ext;
-                move_uploaded_file($file['tmp_name'], $uploadDir . $imagePath);
-            } else {
-                $errors['image'] = "Invalid image format or size (max 5MB)";
-            }
+        if (empty($errors) && !empty($_FILES['image']['name'])) {
+            $imagePath = $this->handleUpload($_FILES['image']);
         }
 
         if (empty($errors)) {
-            // Insert Product
-            $productId = $productModel->insert([
-                'product_name'   => $_POST['product_name'],
-                'sku'            => !empty($_POST['sku']) ? $_POST['sku'] : $productModel->generateSKU($_POST['category_id']),
-                'description'    => $_POST['description'] ?? '',
-                'category_id'    => $_POST['category_id'],
-                'price'          => $_POST['price'],
-                'stock_quantity' => $_POST['stock_quantity'] ?? 0,
-                'image_path'     => $imagePath,
-                'created_by'     => $_SESSION['user_id'] ?? 1
-            ]);
-
-            // Requirement 5.3: Inventory Transaction Logging
-            if ($productId && ($_POST['stock_quantity'] > 0)) {
-                $transactionModel->insert([
-                    'product_id'       => $productId,
-                    'transaction_type' => 'IN',
-                    'quantity'         => $_POST['stock_quantity'],
-                    'reason'           => 'Initial Stock Entry',
-                    'user_id'          => $_SESSION['user_id'] ?? 1
+            try {
+                $db->beginTransaction(); 
+                $productId = $productModel->create([
+                    'product_name'   => $_POST['product_name'],
+                    'sku'            => !empty($_POST['sku']) ? $_POST['sku'] : $productModel->generateSKU(),
+                    'description'    => $_POST['description'] ?? '',
+                    'category_id'    => $_POST['category_id'],
+                    'price'          => $_POST['price'],
+                    'stock_quantity' => $_POST['stock_quantity'],
+                    'low_stock_threshold' => 5,
+                    'status'         => $_POST['status'] ?? 'Active',
+                    'image_path'     => $imagePath,
+                    'created_by'     => $_SESSION['user_id'] ?? 1,
+                    'created_at'     => date('Y-m-d H:i:s')
                 ]);
-            }
 
-            header('Location: /products');
-            exit;
+                if ($productId && $_POST['stock_quantity'] > 0) {
+                    $transactionModel->create([
+                        'product_id' => $productId,
+                        'transaction_type' => 'IN',
+                        'quantity' => $_POST['stock_quantity'],
+                        'unit_price' => $_POST['price'],
+                        'reason' => 'Initial Stock Creation',
+                        'user_id' => $_SESSION['user_id'] ?? 1,
+                        'created_at' => date('Y-m-d H:i:s')
+                    ]);
+                }
+
+                $db->commit();
+                header('Location: /products?success=1');
+                exit;
+            } catch (\Exception $e) {
+                $db->rollBack();
+                $errors['db'] = "System Error: " . $e->getMessage();
+            }
         }
 
-        $categoryModel = new Category();
         return $this->view('products/create', [
-            'errors' => $errors, 
-            'old' => $_POST, 
-            'categories' => $categoryModel->all()
+            'errors' => $errors, 'old' => $_POST, 'categories' => (new Category())->all()
         ]);
     }
 
+    // --- මම අලුතින් ඇතුළත් කළ කොටස: EDIT ---
+    public function edit($id)
+    {
+        $productModel = new Product();
+        $product = $productModel->find($id); // Model එකේ find method එක තිබිය යුතුයි
+
+        if (!$product) {
+            header('Location: /products?error=not_found');
+            exit;
+        }
+
+        return $this->view('products/edit', [
+            'product' => $product,
+            'categories' => (new Category())->all()
+        ]);
+    }
+
+    // --- මම අලුතින් ඇතුළත් කළ කොටස: UPDATE ---
     public function update($id)
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -127,92 +121,59 @@ class ProductController extends Controller
         }
 
         $productModel = new Product();
-        $errors = [];
+        $oldProduct = $productModel->find($id);
 
-        // fetch existing product to compare
-        $existing = $productModel->find($id);
-        if (!$existing) {
-            header('Location: /products');
-            return;
+        if (!$oldProduct) {
+            header('Location: /products?error=not_found');
+            exit;
         }
 
-        // validation
-        if (empty($_POST['product_name']) || strlen($_POST['product_name']) < 3) {
-            $errors['product_name'] = "Name is required (min 3 chars)";
-        }
-        if (floatval($_POST['price'] ?? 0) <= 0) {
-            $errors['price'] = "Price must be positive";
-        }
-
-        // image upload if provided
-        $imagePath = $existing['image_path'];
+        // පින්තූරය upload කරන එක check කරන්න
+        $imagePath = $oldProduct['image_path'];
         if (!empty($_FILES['image']['name'])) {
-            $file = $_FILES['image'];
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $allowed = ['jpg', 'jpeg', 'png'];
-
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mime = finfo_file($finfo, $file['tmp_name']);
-            finfo_close($finfo);
-
-            if (in_array($ext, $allowed) && strpos($mime, 'image/') === 0 && $file['size'] < 5000000) {
-                $uploadDir = "public/uploads/products/";
-                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-                $imagePath = uniqid('PROD_', true) . '.' . $ext;
-                move_uploaded_file($file['tmp_name'], $uploadDir . $imagePath);
-            } else {
-                $errors['image'] = "Invalid image format or size (max 5MB)";
-            }
+            $imagePath = $this->handleUpload($_FILES['image']);
         }
 
-        if (empty($errors)) {
-            // perform update
-            $productModel->updateProduct($id, [
-                'product_name'   => $_POST['product_name'],
-                'sku'            => $_POST['sku'] ?? $existing['sku'],
-                'description'    => $_POST['description'] ?? '',
-                'category_id'    => $_POST['category_id'],
-                'price'          => $_POST['price'],
-                'stock_quantity' => $_POST['stock_quantity'] ?? $existing['stock_quantity'],
-                'image_path'     => $imagePath,
-                'updated_by'     => $_SESSION['user_id'] ?? 1
-            ]);
-
-            header('Location: /products');
-            exit;
-        }
-
-        $categoryModel = new Category();
-        return $this->view('products/edit', [
-            'errors' => $errors,
-            'old' => $_POST,
-            'product' => $existing,
-            'categories' => $categoryModel->all()
+        $productModel->update($id, [
+            'product_name'   => $_POST['product_name'],
+            'description'    => $_POST['description'] ?? '',
+            'category_id'    => $_POST['category_id'],
+            'price'          => $_POST['price'],
+            'stock_quantity' => $_POST['stock_quantity'],
+            'status'         => $_POST['status'] ?? 'Active',
+            'image_path'     => $imagePath,
+            'updated_at'     => date('Y-m-d H:i:s')
         ]);
+
+        header('Location: /products?updated=1');
+        exit;
     }
 
-    public function edit($id)
-    {
-        $productModel = new Product();
-        $categoryModel = new Category();
-        
-        $product = $productModel->find($id);
-        if (!$product) {
-            header('Location: /products');
-            exit;
-        }
-
-        return $this->view('products/edit', [
-            'product' => $product,
-            'categories' => $categoryModel->all()
-        ]);
-    }
-
+    // --- මම අලුතින් ඇතුළත් කළ කොටස: DELETE ---
     public function delete($id)
     {
         $productModel = new Product();
-        $productModel->deleteProduct($id);
+        $productModel->delete($id);
         header('Location: /products?deleted=1');
         exit;
+    }
+
+    private function handleUpload($file)
+    {
+        if (empty($file['name'])) return 'default-prod.png';
+
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $newName = uniqid('PROD_', true) . '.' . $ext;
+        
+        $targetDir = dirname(__DIR__, 2) . '/public/uploads/products/';
+        
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0777, true);
+        }
+        
+        if (move_uploaded_file($file['tmp_name'], $targetDir . $newName)) {
+            return $newName;
+        }
+        return 'default-prod.png';
     }
 }
