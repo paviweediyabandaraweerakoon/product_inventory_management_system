@@ -25,7 +25,11 @@ class CategoryController extends Controller
      */
     public function __construct()
     {
-        parent::__construct();
+ 
+ 
+ 
+ 
+    parent::__construct();
         $this->categoryModel = new Category();
     }
 
@@ -70,8 +74,10 @@ class CategoryController extends Controller
             
             $request = new CategoryRequest();
 
-            // Validate using sanitized data
+            //Updated Validation: Store errors in session to show in the UI
             if (!$request->validate($data)) {
+                $_SESSION['errors'] = $request->getErrors(); // Detailed error messages capture
+                $_SESSION['old'] = $data; // User old input capture
                 header('Location: /categories/create?error=invalid');
                 exit;
             }
@@ -134,7 +140,10 @@ class CategoryController extends Controller
             $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
             
             $request = new CategoryRequest();
+            
+            //Updated Validation: Handling errors for update view
             if (!$request->validate($data)) {
+                $_SESSION['errors'] = $request->getErrors();
                 header("Location: /categories/edit/$id?error=invalid");
                 exit;
             }

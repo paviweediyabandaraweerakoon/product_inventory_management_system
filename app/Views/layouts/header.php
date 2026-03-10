@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>StockFlow - Inventory System</title>
+    
+    <link href="/assets/css/output.css" rel="stylesheet">
+    
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body class="bg-gray-50 flex">
@@ -22,5 +24,4 @@
             </a>
         </nav>
     </aside>
-
     <main class="ml-64 w-full p-8">

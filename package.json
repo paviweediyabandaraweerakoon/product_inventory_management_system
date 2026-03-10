@@ -1,0 +1,27 @@
+{
+  "name": "product_inventory_management_system",
+  "version": "1.0.0",
+  "description": "Project scaffold.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": ".\\node_modules\\.bin\\tailwindcss -i ./public/assets/css/input.css -o ./public/assets/css/output.css --watch",
+    "build": ".\\node_modules\\.bin\\tailwindcss -i ./public/assets/css/input.css -o ./public/assets/css/output.css --minify"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paviweediyabandaraweerakoon/product_inventory_management_system.git"
+  },
+  "keywords": [],
+  "author": "Pavi Weerakoon",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/paviweediyabandaraweerakoon/product_inventory_management_system/issues"
+  },
+  "homepage": "https://github.com/paviweediyabandaraweerakoon/product_inventory_management_system#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13"
+  }
+}
