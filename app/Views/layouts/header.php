@@ -4,21 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $title ?? 'StockFlow | Inventory System' ?></title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <title>StockFlow - Inventory System</title>
     
     <link href="/assets/css/output.css" rel="stylesheet">
-    
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="/assets/js/lucide.js"></script>
+
     <style>
-        /* In Sidebar, Hide Scrollbar */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { overflow-x: hidden; }
     </style>
 </head>
 <body class="bg-gray-50 flex">
 
-    <aside class="w-64 h-screen bg-[#0f172a] text-slate-300 border-r border-slate-800 fixed flex flex-col no-scrollbar">
+    <aside class="w-64 h-screen bg-[#0f172a] text-slate-300 border-r border-slate-800 fixed flex flex-col no-scrollbar z-50">
         <div class="p-6 border-b border-slate-800">
             <div class="flex items-center gap-3">
                 <div class="bg-blue-600 p-2 rounded-lg">
@@ -30,13 +28,13 @@
 
         <nav class="mt-6 px-4 flex-1">
             <?php 
-                // identify current URI to apply active styles on sidebar links
-                $current_uri = $_SERVER['REQUEST_URI']; 
+                // Determine the current URI for active link highlighting
+                $current_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH); 
             ?>
 
             <a href="/dashboard" 
-               class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all group <?= $current_uri == '/dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'hover:bg-slate-800 hover:text-white' ?>">
-                <i data-lucide="layout-dashboard" class="size-5 <?= $current_uri == '/dashboard' ? 'text-white' : 'group-hover:text-blue-400' ?>"></i>
+               class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all group <?= ($current_uri == '/dashboard' || $current_uri == '/') ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'hover:bg-slate-800 hover:text-white' ?>">
+                <i data-lucide="layout-dashboard" class="size-5 <?= ($current_uri == '/dashboard' || $current_uri == '/') ? 'text-white' : 'group-hover:text-blue-400' ?>"></i>
                 <span class="font-medium">Dashboard</span>
             </a>
 
@@ -66,5 +64,4 @@
         </div>
     </aside>
 
-    <main class="ml-64 w-full min-h-screen p-8">
-    <main class="ml-64 w-full p-8">
+    <main class="ml-64 flex-1 min-h-screen p-8">

@@ -6,105 +6,132 @@ use Exception;
 
 /**
  * Class Router
- * Handles request routing and dispatches to controllers with REST support.
- * Provides better security and stability.
+ * * Handles HTTP routing for the application.
  */
-class Router {
+class Router
+{
+    /**
+     * Holds the registered routes.
+     * @var array
+     */
     protected array $routes = [];
 
     /**
-     * Register GET routes
+     * Register a GET route.
+     * * @param string $path
+     * @param array $handler
+     * @return void
      */
-    public function get(string $path, array $handler): void {
+    public function get(string $path, array $handler): void
+    {
         $this->routes['GET'][$this->convertToRegex($path)] = $handler;
     }
 
     /**
-     * Register POST routes
+     * Register a POST route.
+     * * @param string $path
+     * @param array $handler
+     * @return void
      */
-    public function post(string $path, array $handler): void {
+    public function post(string $path, array $handler): void
+    {
         $this->routes['POST'][$this->convertToRegex($path)] = $handler;
     }
 
     /**
-     * Register DELETE routes
+     * Register a DELETE route.
+     * * @param string $path
+     * @param array $handler
+     * @return void
      */
-    public function delete(string $path, array $handler): void {
+    public function delete(string $path, array $handler): void
+    {
         $this->routes['DELETE'][$this->convertToRegex($path)] = $handler;
     }
 
     /**
-     * Converts path with parameters (e.g., /categories/{id}) to Regex
+     * Convert path to a regular expression.
+     * * @param string $path
+     * @return string
      */
-    private function convertToRegex(string $path): string {
-        return "@^" . preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<\1>[a-zA-Z0-9_]+)', $path) . "$@";
+    private function convertToRegex(string $path): string
+    {
+        $path = trim($path, '/');
+        if ($path === "") {
+            return "#^/$#";
+        }
+        $regex = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[a-zA-Z0-9_]+)', $path);
+        return "#^/" . $regex . "/?$#";
     }
 
     /**
-     *complete the code for resolve method
-      * 
+     * Resolve the current request and execute the handler.
+     * * @return void
+     * @throws Exception
      */
-    public function resolve(): mixed {
+    public function resolve(): void
+    {
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
         $method = $_SERVER['REQUEST_METHOD'];
 
-        /** Method Spoofing: Handles DELETE/PUT from HTML forms
-         * HTML forms support only GET and POST. To use DELETE or PUT,
-         * we use a hidden field named '_method'.
-         */
+        // Method spoofing for forms
         if ($method === 'POST' && isset($_POST['_method'])) {
             $method = strtoupper($_POST['_method']);
         }
 
-        // Extract path without query parameters and normalize it
-        $path = explode('?', $uri)[0];
-        $basePath = str_replace('/index.php', '', $_SERVER['SCRIPT_NAME']);
-        $path = str_replace($basePath, '', $path);
-        if (empty($path)) $path = '/';
+        $path = parse_url($uri, PHP_URL_PATH);
+        
+        // Clean XAMPP sub-folder path
+        $scriptName = $_SERVER['SCRIPT_NAME']; 
+        $basePath = str_replace('index.php', '', $scriptName);
+        
+        if (strpos($path, $basePath) === 0) {
+            $path = substr($path, strlen($basePath));
+        }
+        
+        $path = '/' . trim($path, '/');
 
-        /**
-         * Fix: Undefined index check
-         */
         if (!isset($this->routes[$method])) {
-            return $this->abort404();
+            $this->abort404($path);
+            return;
         }
 
         foreach ($this->routes[$method] as $route => $handler) {
             if (preg_match($route, $path, $matches)) {
-                // Named parameters extraction
                 $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-                
-                if (is_array($handler)) {
-                    [$controllerClass, $methodName] = $handler;
+                [$controllerClass, $methodName] = $handler;
 
-                    /** * Safety Check: Verify Class Existence
-                     */
-                    if (!class_exists($controllerClass)) {
-                        throw new Exception("Controller class '$controllerClass' not found.");
-                    }
-
-                    $controller = new $controllerClass();
-
-                    /** * Safety Check: Verify Method Existence
-                     */
-                    if (!method_exists($controller, $methodName)) {
-                        throw new Exception("Method '$methodName' not found in '$controllerClass'.");
-                    }
-
-                    // Parameters are passed as named parameters to the controller method
-                    return call_user_func_array([$controller, $methodName], $params);
+                if (!class_exists($controllerClass)) {
+                    throw new Exception("Controller '$controllerClass' not found.");
                 }
+
+                $controller = new $controllerClass();
+                
+                if (!method_exists($controller, $methodName)) {
+                    throw new Exception("Method '$methodName' not found in $controllerClass.");
+                }
+
+                call_user_func_array([$controller, $methodName], $params);
+                return;
             }
         }
-        return $this->abort404();
+
+        $this->abort404($path);
     }
 
     /**
-     * Stop execution and return 404
+     * Terminate with a 404 error.
+     * * @param string $path
+     * @return void
      */
-    private function abort404(): void {
+    private function abort404(string $path): void
+    {
         http_response_code(404);
-        echo "404 - Page Not Found";
-        exit; 
+        echo "<h1>404 - Not Found</h1>";
+        echo "Debug Info: The path <b>'$path'</b> did not match any routes.<br>";
+        echo "Registered Routes: <pre>";
+        print_r($this->routes);
+        echo "</pre>";
+        exit;
     }
 }

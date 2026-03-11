@@ -35,8 +35,7 @@ $router->get('/categories/{id}/edit', [CategoryController::class, 'edit']);
 $router->post('/categories/{id}', [CategoryController::class, 'update']);
 
 // 6. Delete (DELETE /categories/{id})
-$router->delete('/categories/{id}', [CategoryController::class, 'destroy']); 
-
+$router->delete('/categories/{id}', [CategoryController::class, 'destroy']);
 try {
     $router->resolve();
 } catch (Exception $e) {

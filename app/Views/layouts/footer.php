@@ -1,9 +1,9 @@
-</main> </div> <script>
-    // Icons Render 
-    lucide.createIcons();
-    
-    // If needed, you can add global JavaScript here for all pages, like handling flash messages or common UI interactions.
-</script>
-
+</main>
+    <script>
+        // Start Lucide icons manually since we are not using CDN
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    </script>
 </body>
 </html>
