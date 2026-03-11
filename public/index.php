@@ -1,18 +1,45 @@
 <?php
+/**
+ * @author Pavi Weerakoon
+ * @version 1.0.0
+ */
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use App\Core\Env;
 use App\Core\Router;
+use App\Controllers\DashboardController;
+use App\Controllers\CategoryController;
 
-// Load environment variables
 Env::load(__DIR__ . '/../.env');
 
 $router = new Router();
-// Routes temprary
-$router->add('GET', '/', 'DashboardController@index');
 
-$method = $_SERVER['REQUEST_METHOD'];
-$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$uri = str_replace('/product_inventory_management_system/public', '', $uri);
+// Dashboard
+$router->get('/', [DashboardController::class, 'index']);
 
-$router->handle($method, $uri);
+// 1. Category Listing
+$router->get('/categories', [CategoryController::class, 'index']);
+
+// 2. Category Create Form (Static Route)
+$router->get('/categories/create', [CategoryController::class, 'create']);
+
+// 3. Category Store (POST /categories)
+$router->post('/categories', [CategoryController::class, 'store']); 
+
+// --- Parameterized Routes ---
+// 4. Edit Form
+$router->get('/categories/{id}/edit', [CategoryController::class, 'edit']);
+
+// 5. Update (POST /categories/{id})
+$router->post('/categories/{id}', [CategoryController::class, 'update']);
+
+// 6. Delete (DELETE /categories/{id})
+$router->delete('/categories/{id}', [CategoryController::class, 'destroy']); 
+
+try {
+    $router->resolve();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "System Error: " . $e->getMessage();
+}
