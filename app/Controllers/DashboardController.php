@@ -10,14 +10,24 @@ use Throwable;
 
 /**
  * Class DashboardController
- * Handles the main dashboard logic with live statistics and charts.
+ * * Responsible for gathering and processing analytics, stock levels, 
+ * and sales performance data to be displayed on the main admin dashboard.
  */
 class DashboardController extends Controller
 {
+    /** @var Product */
     private Product $productModel;
+
+    /** @var Category */
     private Category $categoryModel;
+
+    /** @var InventoryTransaction */
     private InventoryTransaction $transactionModel;
 
+    /**
+     * DashboardController constructor.
+     * Initializes the required models as controller properties.
+     */
     public function __construct()
     {
         parent::__construct();
@@ -26,13 +36,20 @@ class DashboardController extends Controller
         $this->transactionModel = new InventoryTransaction();
     }
 
+    /**
+     * Display the dashboard with live statistics and charts.
+     * * @return void
+     */
     public function index(): void
     {
         try {
-            // 1. Live Category Distribution
+            // Configurable report period (e.g., last 6 months)
+            $reportMonths = 6;
+
+            // 1. Live Category Distribution (Considering Soft Deletes)
             $catSql = "SELECT c.category_name as name, COUNT(p.id) as count 
                        FROM categories c 
-                       LEFT JOIN products p ON c.id = p.category_id 
+                       LEFT JOIN products p ON c.id = p.category_id AND p.deleted_at IS NULL
                        WHERE c.status = 'active' AND c.deleted_at IS NULL 
                        GROUP BY c.id";
 
@@ -40,23 +57,24 @@ class DashboardController extends Controller
             $chartLabels = array_column($chartResults, 'name');
             $chartData   = array_column($chartResults, 'count');
 
-            // 2. Live Sales Performance (Last 6 Months)
+            // 2. Live Sales Performance (Dynamic Month Generation)
             $salesSql = "SELECT 
                             DATE_FORMAT(created_at, '%b') as month, 
                             SUM(quantity * unit_price) as total 
                          FROM inventory_transactions 
                          WHERE transaction_type = 'OUT' 
-                         AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-                         GROUP BY MONTH(created_at)
+                         AND created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
+                         GROUP BY YEAR(created_at), MONTH(created_at)
                          ORDER BY created_at ASC";
 
-            $salesResults = $this->transactionModel->query($salesSql)->fetchAll(\PDO::FETCH_ASSOC);
+            $salesResults = $this->transactionModel->query($salesSql, [$reportMonths])->fetchAll(\PDO::FETCH_ASSOC);
             $salesLabels = array_column($salesResults, 'month');
             $salesData   = array_column($salesResults, 'total');
 
+            // Fallback for empty sales data
             if (empty($salesLabels)) {
-                $salesLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                $salesData   = [0, 0, 0, 0, 0, 0];
+                $salesLabels = ['No Data'];
+                $salesData   = [0];
             }
 
             // 3. Low Stock Calculation
@@ -69,15 +87,22 @@ class DashboardController extends Controller
             $valueResult = $this->productModel->query($valueSql)->fetch(\PDO::FETCH_ASSOC);
             $totalValue = $valueResult['total_value'] ?? 0;
 
+            // 5. Recent Activity (LIVE)
+            // Fetching last 10 transactions to show real-time movement
+            $activitySql = "SELECT t.*, p.product_name 
+                            FROM inventory_transactions t
+                            JOIN products p ON t.product_id = p.id
+                            ORDER BY t.created_at DESC LIMIT 10";
+            $recentActivity = $this->transactionModel->query($activitySql)->fetchAll(\PDO::FETCH_ASSOC);
+
             // Prepare data array for the view
-            //collect all the data we need for the dashboard widgets and charts into a single array to pass to the view
             $data = [
                 'totalProducts'    => $this->productModel->countActiveRecords(), 
                 'lowStockCount'    => $lowStockCount, 
                 'inventoryValue'   => number_format($totalValue, 2),
                 'activeCategories' => $this->categoryModel->countActiveRecords(), 
-                'recentProducts'   => $this->productModel->all(), 
-                'recentActivity'   => [], 
+                'recentProducts'   => $this->productModel->all(), // Assuming all() handles soft deletes
+                'recentActivity'   => $recentActivity, 
                 'chartLabels'      => $chartLabels,
                 'chartData'        => $chartData,
                 'salesLabels'      => $salesLabels,
@@ -87,9 +112,15 @@ class DashboardController extends Controller
             $this->view('dashboard/index', $data);
 
         } catch (Throwable $e) {
-            error_log("Dashboard Error: " . $e->getMessage());
+            // Systematic error logging with context
+            error_log(sprintf(
+                "[%s] Dashboard Error: %s in %s on line %d",
+                date('Y-m-d H:i:s'),
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
             
-            // die($e->getMessage()); 
             $this->view('errors/500'); 
         }
     }
