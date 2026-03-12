@@ -4,28 +4,36 @@ namespace App\Core;
 
 use App\Core\Database;
 use PDO;
+use PDOStatement;
 
 /**
  * Class Model
- * Base class for all models providing common database operations.
+ * Base class for all models, providing common database operations.
  */
 class Model
 {
+    /** @var PDO Database connection instance */
     protected PDO $db;
+
+    /** @var string The table associated with the model */
     protected string $table;
 
+    /**
+     * Model constructor.
+     * Initializes the database connection using Singleton pattern.
+     */
     public function __construct()
     {
         $this->db = Database::getInstance()->getConnection();
     }
 
     /**
-     * Executes a SQL query with parameters.
-     * @param string $sql
+     * Prepare and execute a SQL query.
+     * * @param string $sql
      * @param array $params
-     * @return \PDOStatement
+     * @return PDOStatement
      */
-    public function query(string $sql, array $params = [])
+    public function query(string $sql, array $params = []): PDOStatement
     {
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
@@ -33,8 +41,28 @@ class Model
     }
 
     /**
-     * Find a record by its primary ID.
-     * @param int $id
+     * Get all records that are not soft-deleted.
+     * * @return array
+     */
+    public function all(): array
+    {
+        $sql = "SELECT * FROM `{$this->table}` WHERE deleted_at IS NULL";
+        return $this->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Get the total count of active (non-deleted) records.
+     * * @return int
+     */
+    public function countActiveRecords(): int
+    {
+        $sql = "SELECT COUNT(*) FROM `{$this->table}` WHERE deleted_at IS NULL";
+        return (int)$this->query($sql)->fetchColumn();
+    }
+
+    /**
+     * Find a single record by its ID.
+     * * @param int $id
      * @return array|false
      */
     public function find(int $id): array|false
@@ -44,8 +72,8 @@ class Model
     }
 
     /**
-     * Create a new record in the database.
-     * @param array $data
+     * Insert a new record into the database.
+     * * @param array $data
      * @return string|false
      */
     public function create(array $data): string|false
@@ -53,39 +81,33 @@ class Model
         $keys = array_keys($data);
         $fields = implode(', ', $keys);
         $placeholders = implode(', ', array_fill(0, count($keys), '?'));
-        
         $sql = "INSERT INTO `{$this->table}` ({$fields}) VALUES ({$placeholders})";
         $this->query($sql, array_values($data));
-        
         return $this->db->lastInsertId();
     }
 
     /**
-     * Update an existing record while checking for soft delete.
-     * @param int $id
+     * Update an existing record by ID.
+     * * @param int $id
      * @param array $data
      * @return bool
      */
     public function update(int $id, array $data): bool
     {
         $fields = "";
-        foreach ($data as $key => $value) {
-            $fields .= "`{$key}` = ?, ";
+        foreach ($data as $key => $value) { 
+            $fields .= "`{$key}` = ?, "; 
         }
         $fields = rtrim($fields, ", ");
-        
-        // Consider deleted_at IS NULL before update
         $sql = "UPDATE `{$this->table}` SET {$fields} WHERE id = ? AND deleted_at IS NULL";
-        
         $values = array_values($data);
         $values[] = $id;
-        
         return (bool)$this->query($sql, $values);
     }
 
     /**
-     * Performs a soft delete on a record.
-     * @param int $id
+     * Perform a soft delete by setting the deleted_at timestamp.
+     * * @param int $id
      * @return bool
      */
     public function delete(int $id): bool
