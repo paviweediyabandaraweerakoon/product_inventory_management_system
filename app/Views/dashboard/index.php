@@ -20,74 +20,66 @@
     </div>
 
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <div class="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-md transition-all hover:shadow-xl border border-gray-100">
+        <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
             <div class="flex items-start justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-600">Total Products</p>
-                    <p class="mt-2 text-3xl font-bold text-gray-900">1,234</p>
-                    <div class="mt-3 flex items-center gap-2">
-                        <div class="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-600">
-                            <i data-lucide="arrow-up-right" class="size-3"></i>
-                            <span class="text-xs font-semibold">+12.5%</span>
-                        </div>
-                        <span class="text-xs text-gray-500">vs last month</span>
-                    </div>
+                    <p class="mt-2 text-3xl font-bold text-gray-900"><?= number_format($totalProducts) ?></p>
                 </div>
-                <div class="flex size-14 items-center justify-center rounded-xl bg-blue-50 text-blue-600 group-hover:scale-110 transition-transform">
+                <div class="flex size-14 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                     <i data-lucide="package" class="size-7"></i>
                 </div>
             </div>
         </div>
 
-        <div class="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-md transition-all hover:shadow-xl border border-gray-100">
+        <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
             <div class="flex items-start justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-600">Low Stock Alert</p>
-                    <p class="mt-2 text-3xl font-bold text-gray-900">23</p>
-                    <div class="mt-3 flex items-center gap-2">
-                        <div class="flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-red-600">
-                            <i data-lucide="arrow-down-right" class="size-3"></i>
-                            <span class="text-xs font-semibold">-8.2%</span>
-                        </div>
-                        <span class="text-xs text-gray-500">Action required</span>
-                    </div>
+                    <p class="mt-2 text-3xl font-bold text-gray-900"><?= $lowStockCount ?></p>
                 </div>
-                <div class="flex size-14 items-center justify-center rounded-xl bg-orange-50 text-orange-600 group-hover:scale-110 transition-transform">
-                    <i data-lucide="alert-circle" class="size-7"></i>
+                <div class="flex size-14 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                    <i data-lucide="alert-triangle" class="size-7"></i>
                 </div>
             </div>
         </div>
 
-        <div class="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-md transition-all hover:shadow-xl border border-gray-100">
+        <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
             <div class="flex items-start justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-600">Inventory Value</p>
-                    <p class="mt-2 text-3xl font-bold text-gray-900">$45,678</p>
-                    <div class="mt-3 flex items-center gap-2">
-                        <div class="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-600">
-                            <i data-lucide="arrow-up-right" class="size-3"></i>
-                            <span class="text-xs font-semibold">+23.1%</span>
-                        </div>
-                    </div>
+                    <p class="mt-2 text-3xl font-bold text-gray-900">LKR <?= $inventoryValue ?></p>
                 </div>
-                <div class="flex size-14 items-center justify-center rounded-xl bg-green-50 text-green-600 group-hover:scale-110 transition-transform">
-                    <i data-lucide="dollar-sign" class="size-7"></i>
+                <div class="flex size-14 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                    <i data-lucide="banknote" class="size-7"></i>
                 </div>
             </div>
         </div>
 
-        <div class="group relative overflow-hidden rounded-2xl bg-white p-6 shadow-md transition-all hover:shadow-xl border border-gray-100">
+        <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
             <div class="flex items-start justify-between">
                 <div>
                     <p class="text-sm font-medium text-gray-600">Active Categories</p>
-                    <p class="mt-2 text-3xl font-bold text-gray-900">48</p>
-                    <div class="mt-3 flex items-center gap-2">
-                        <span class="text-xs text-gray-500">Across 5 Departments</span>
-                    </div>
+                    <p class="mt-2 text-3xl font-bold text-gray-900"><?= $activeCategories ?></p>
                 </div>
-                <div class="flex size-14 items-center justify-center rounded-xl bg-purple-50 text-purple-600 group-hover:scale-110 transition-transform">
+                <div class="flex size-14 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
                     <i data-lucide="layers" class="size-7"></i>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+        <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
+            <h3 class="mb-4 text-lg font-semibold text-gray-900">Sales Performance (Last <?= \App\Core\Env::get('DASHBOARD_REPORT_MONTHS', 6) ?> Months)</h3>
+            <div class="relative h-64">
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+        <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
+            <h3 class="mb-4 text-lg font-semibold text-gray-900">Category Distribution</h3>
+            <div class="relative h-64">
+                <canvas id="categoryChart"></canvas>
             </div>
         </div>
     </div>
@@ -95,54 +87,125 @@
     <div class="grid gap-6 lg:grid-cols-3">
         <div class="lg:col-span-2 rounded-2xl bg-white shadow-md border border-gray-100 overflow-hidden">
             <div class="flex items-center justify-between border-b p-6">
-                <h3 class="text-lg font-semibold text-gray-900">Recent Products</h3>
-                <a href="/products" class="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700">
-                    View all <i data-lucide="arrow-up-right" class="size-4"></i>
-                </a>
+                <h3 class="text-lg font-semibold text-gray-900">Recent Catalog Additions</h3>
+                <a href="/products" class="text-sm font-medium text-blue-600 hover:underline">View all catalog</a>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Product</th>
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Stock</th>
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Price</th>
-                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Status</th>
+                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Product Name</th>
+                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Available Stock</th>
+                            <th class="px-6 py-3 text-xs font-medium uppercase text-gray-500">Availability</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
+                        <?php if (empty($recentProducts)): ?>
+                            <tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No recent products found.</td></tr>
+                        <?php else: foreach ($recentProducts as $product): ?>
                         <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4 font-medium text-gray-900"><?= htmlspecialchars($product['product_name']) ?></td>
+                            <td class="px-6 py-4 text-sm text-gray-600 font-mono"><?= $product['stock_quantity'] ?></td>
                             <td class="px-6 py-4">
-                                <div class="font-medium text-gray-900">Wireless Headphones</div>
-                                <div class="text-xs text-gray-500">WH-2024-001</div>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-600 font-semibold">45</td>
-                            <td class="px-6 py-4 text-sm font-bold text-gray-900">$89.99</td>
-                            <td class="px-6 py-4">
-                                <span class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">In Stock</span>
+                                <?php $isLow = $product['stock_quantity'] <= \App\Core\Env::get('LOW_STOCK_THRESHOLD', 5); ?>
+                                <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold <?= !$isLow ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' ?>">
+                                    <?= !$isLow ? 'In Stock' : 'Low Stock' ?>
+                                </span>
                             </td>
                         </tr>
+                        <?php endforeach; endif; ?>
                     </tbody>
                 </table>
             </div>
         </div>
 
         <div class="rounded-2xl bg-white p-6 shadow-md border border-gray-100">
-            <h3 class="mb-6 text-lg font-semibold text-gray-900">Recent Activity</h3>
-            <div class="space-y-6">
-                <div class="flex gap-3">
-                    <div class="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                        <i data-lucide="plus" class="size-4"></i>
+            <h3 class="mb-6 text-lg font-semibold text-gray-900">Recent Inventory Movements</h3>
+            <div class="space-y-4">
+                <?php if (empty($recentActivity)): ?>
+                    <p class="text-sm text-gray-500 text-center">No recent activity logged.</p>
+                <?php else: foreach ($recentActivity as $activity): ?>
+                    <div class="flex gap-3 border-l-2 <?= $activity['transaction_type'] === 'IN' ? 'border-green-500' : 'border-blue-500' ?> pl-3">
+                        <div class="flex size-8 shrink-0 items-center justify-center rounded-full <?= $activity['transaction_type'] === 'IN' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600' ?>">
+                            <i data-lucide="<?= $activity['transaction_type'] === 'IN' ? 'arrow-up-right' : 'arrow-down-right' ?>" class="size-4"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">
+                                <?= htmlspecialchars($activity['product_name']) ?> 
+                                <span class="text-xs font-normal text-gray-500">
+                                    (<?= $activity['transaction_type'] === 'IN' ? '+' : '-' ?><?= $activity['quantity'] ?>)
+                                </span>
+                            </p>
+                            <p class="text-xs text-gray-600 italic">"<?= htmlspecialchars($activity['remarks'] ?? $activity['reason'] ?? 'Stock Update') ?>"</p>
+                            <p class="text-[10px] text-gray-400 mt-1"><?= date('M d, h:i A', strtotime($activity['created_at'])) ?></p>
+                        </div>
                     </div>
-                    <div>
-                        <p class="text-sm font-medium text-gray-900">Product Added</p>
-                        <p class="text-xs text-gray-600">Wireless Mouse by John Doe</p>
-                        <p class="mt-1 text-xs text-gray-400">10 minutes ago</p>
-                    </div>
-                </div>
+                <?php endforeach; endif; ?>
             </div>
         </div>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // 1. Category Donut Chart (Dynamic)
+    const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(categoryCtx, {
+        type: 'doughnut',
+        data: {
+            labels: <?= json_encode($chartLabels) ?>,
+            datasets: [{
+                data: <?= json_encode($chartData) ?>,
+                backgroundColor: ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            cutout: '75%',
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } }
+            }
+        }
+    });
+
+    // 2. Sales Performance Line Chart (Dynamic)
+    const salesCtx = document.getElementById('salesChart').getContext('2d');
+    new Chart(salesCtx, {
+        type: 'line',
+        data: {
+            labels: <?= json_encode($salesLabels) ?>, // Months from DB
+            datasets: [{
+                label: 'Monthly Revenue (LKR)',
+                data: <?= json_encode($salesData) ?>, // Totals from DB
+                borderColor: '#4F46E5',
+                borderWidth: 3,
+                tension: 0.4,
+                pointRadius: 4,
+                pointBackgroundColor: '#4F46E5',
+                fill: true,
+                backgroundColor: (context) => {
+                    const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400);
+                    gradient.addColorStop(0, 'rgba(79, 70, 229, 0.2)');
+                    gradient.addColorStop(1, 'rgba(79, 70, 229, 0)');
+                    return gradient;
+                }
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, grid: { display: false } },
+                x: { grid: { display: false } }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+</script>
 
 <?php include __DIR__ . '/../layouts/footer.php'; ?>
