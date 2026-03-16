@@ -10,7 +10,7 @@ use Throwable;
 /**
  * Class AuthController
  * Manages the user authentication lifecycle including secure login, 
- * account registration, email verification, and session management.
+ * account registration, email verification and session management.
  */
 class AuthController extends Controller
 {
