@@ -8,7 +8,7 @@ use PDOStatement;
 
 /**
  * Class Model
- * Base class for all models, providing common database operations.
+ * Base class for all models, providing common database operations with soft-delete support.
  */
 class Model
 {
@@ -20,7 +20,6 @@ class Model
 
     /**
      * Model constructor.
-     * Initializes the database connection using Singleton pattern.
      */
     public function __construct()
     {
@@ -28,10 +27,7 @@ class Model
     }
 
     /**
-     * Prepare and execute a SQL query.
-     * * @param string $sql
-     * @param array $params
-     * @return PDOStatement
+     * Prepare and execute a SQL query safely.
      */
     public function query(string $sql, array $params = []): PDOStatement
     {
@@ -41,56 +37,45 @@ class Model
     }
 
     /**
-     * Get all records that are not soft-deleted.
-     * * @return array
+     * Get all active records.
      */
     public function all(): array
     {
-        $sql = "SELECT * FROM `{$this->table}` WHERE deleted_at IS NULL";
-        return $this->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        return $this->query("SELECT * FROM `{$this->table}` WHERE deleted_at IS NULL")->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
-     * Get the total count of active (non-deleted) records.
-     * * @return int
+     * Get the total count of active records for Dashboard.
      */
     public function countActiveRecords(): int
     {
-        $sql = "SELECT COUNT(*) FROM `{$this->table}` WHERE deleted_at IS NULL";
-        return (int)$this->query($sql)->fetchColumn();
+        return (int)$this->query("SELECT COUNT(*) FROM `{$this->table}` WHERE deleted_at IS NULL")->fetchColumn();
     }
 
     /**
-     * Find a single record by its ID.
-     * * @param int $id
-     * @return array|false
+     * Find a single active record by ID.
      */
     public function find(int $id): array|false
     {
-        $sql = "SELECT * FROM `{$this->table}` WHERE id = ? AND deleted_at IS NULL";
-        return $this->query($sql, [$id])->fetch(PDO::FETCH_ASSOC);
+        return $this->query("SELECT * FROM `{$this->table}` WHERE id = ? AND deleted_at IS NULL", [$id])->fetch(PDO::FETCH_ASSOC);
     }
 
     /**
-     * Insert a new record into the database.
-     * * @param array $data
-     * @return string|false
+     * Insert a new record and return last ID.
      */
     public function create(array $data): string|false
     {
         $keys = array_keys($data);
         $fields = implode(', ', $keys);
         $placeholders = implode(', ', array_fill(0, count($keys), '?'));
+        
         $sql = "INSERT INTO `{$this->table}` ({$fields}) VALUES ({$placeholders})";
         $this->query($sql, array_values($data));
         return $this->db->lastInsertId();
     }
 
     /**
-     * Update an existing record by ID.
-     * * @param int $id
-     * @param array $data
-     * @return bool
+     * Update an active record.
      */
     public function update(int $id, array $data): bool
     {
@@ -99,20 +84,19 @@ class Model
             $fields .= "`{$key}` = ?, "; 
         }
         $fields = rtrim($fields, ", ");
+        
         $sql = "UPDATE `{$this->table}` SET {$fields} WHERE id = ? AND deleted_at IS NULL";
         $values = array_values($data);
         $values[] = $id;
-        return (bool)$this->query($sql, $values);
+        
+        return $this->query($sql, $values)->rowCount() > 0;
     }
 
     /**
-     * Perform a soft delete by setting the deleted_at timestamp.
-     * * @param int $id
-     * @return bool
+     * Perform a soft delete.
      */
     public function delete(int $id): bool
     {
-        $sql = "UPDATE `{$this->table}` SET deleted_at = NOW() WHERE id = ?";
-        return (bool)$this->query($sql, [$id]);
+        return $this->query("UPDATE `{$this->table}` SET deleted_at = NOW() WHERE id = ?", [$id])->rowCount() > 0;
     }
 }

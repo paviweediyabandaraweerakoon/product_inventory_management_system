@@ -6,24 +6,18 @@ use App\Core\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Requests\ProductRequest;
+use App\Core\Env;
 use Throwable;
 
 /**
  * Class ProductController
- * Handles CRUD operations for Products.
+ * Manages product lifecycle with input sanitization and soft-delete handling.
  */
 class ProductController extends Controller
 {
-    /** @var Product */
     private Product $productModel;
-
-    /** @var Category */
     private Category $categoryModel;
 
-    /**
-     * ProductController constructor.
-     * Initializes models as controller properties.
-     */
     public function __construct()
     {
         parent::__construct();
@@ -31,58 +25,45 @@ class ProductController extends Controller
         $this->categoryModel = new Category();
     }
 
-    /**
-     * Show all products.
-     * * @return void
-     */
     public function index(): void
     {
         try {
             $products = $this->productModel->all();
-
             $this->view('products/index', [
                 'products' => $products,
                 'title' => 'Product List'
             ]);
         } catch (Throwable $e) {
-            error_log("Product Index Error: " . $e->getMessage());
+            $this->logError('Index', $e);
             $this->view('errors/500');
+            exit;
         }
     }
 
-    /**
-     * Show form for adding a new product.
-     * * @return void
-     */
     public function create(): void
     {
         try {
             $categories = $this->categoryModel->all();
-
             $this->view('products/create', [
                 'categories' => $categories
             ]);
         } catch (Throwable $e) {
-            error_log("Product Create View Error: " . $e->getMessage());
+            $this->logError('Create View', $e);
             $this->view('errors/500');
+            exit;
         }
     }
 
-    /**
-     * Save data from create form to database.
-     * * @return void
-     */
     public function store(): void
     {
         try {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                header('Location: /products');
+                $this->redirect('/products');
                 return;
             }
 
-            // Sanitizing input data
-            $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
-            
+            // Input Handling: Trim and sanitize all inputs
+            $data = array_map(fn($v) => trim((string)$v), $_POST);
             $request = new ProductRequest($data);
 
             if (!$request->validate()) {
@@ -94,7 +75,6 @@ class ProductController extends Controller
                 return;
             }
 
-            // Save the product using validated data
             $this->productModel->create([
                 'product_name'   => $data['product_name'],
                 'category_id'    => $data['category_id'],
@@ -103,31 +83,49 @@ class ProductController extends Controller
                 'status'         => 'active'
             ]);
 
-            header('Location: /products?success=created');
-            exit;
+            $this->redirect('/products?success=created');
 
         } catch (Throwable $e) {
-            error_log("Product Store Error: " . $e->getMessage());
+            $this->logError('Store', $e);
+            $this->view('errors/500');
+            exit;
+        }
+    }
+
+    public function destroy(string $id): void
+    {
+        try {
+            $this->productModel->delete((int)$id);
+            $this->redirect('/products?success=deleted');
+        } catch (Throwable $e) {
+            $this->logError('Delete', $e);
             $this->view('errors/500');
             exit;
         }
     }
 
     /**
-     * Soft delete a product.
-     * * @param int $id
-     * @return void
+     * Helper for URL redirection with base URL handling from .env configuration
      */
-    public function destroy(int $id): void
+    private function redirect(string $path): void
     {
-        try {
-            $this->productModel->delete($id);
-            header('Location: /products?success=deleted');
-            exit;
-        } catch (Throwable $e) {
-            error_log("Product Delete Error: " . $e->getMessage());
-            $this->view('errors/500');
-            exit;
-        }
+        $baseUrl = rtrim(Env::get('APP_URL'), '/');
+        header('Location: ' . $baseUrl . '/' . ltrim($path, '/'));
+        exit;
+    }
+
+    /**
+     * Standardized error logging
+     */
+    private function logError(string $action, Throwable $e): void
+    {
+        error_log(sprintf(
+            "[%s] ProductController %s Error: %s in %s on line %d",
+            date('Y-m-d H:i:s'),
+            $action,
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine()
+        ));
     }
 }
