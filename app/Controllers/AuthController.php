@@ -4,90 +4,93 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Models\User;
+use App\Core\Env;
 use Throwable;
 
 /**
  * Class AuthController
- * Handles user authentication including login, registration, and logout.
+ * Manages the user authentication lifecycle including secure login, 
+ * account registration, email verification, and session management.
  */
 class AuthController extends Controller
 {
     /** @var User Instance of the User model */
-    protected User $userModel;
+    private User $userModel;
 
-    /**
-     * Owner configurable settings
-     */
-    private int $maxAttempts = 3;
-    private int $lockMinutes = 15;
+    /** @var int Maximum failed login attempts allowed before lockout */
+    private int $maxAttempts;
+
+    /** @var int Duration of account lockout in minutes */
+    private int $lockMinutes;
 
     /**
      * AuthController constructor.
+     * Initializes models and configuration from environment variables.
      */
     public function __construct()
     {
+        parent::__construct();
         $this->userModel = new User();
+        
+        // Configuration: Using Env class for professional standard
+        $this->maxAttempts = (int) Env::get('AUTH_MAX_ATTEMPTS', 3);
+        $this->lockMinutes = (int) Env::get('AUTH_LOCK_MINUTES', 15);
     }
 
     /**
-     * Handle user login requests.
+     * Handle user login requests with account lockout protection.
      */
-    public function login(): mixed
+    public function login(): void
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            return $this->view('auth/login');
+            $this->view('auth/login');
+            return;
         }
 
         try {
-
+            // Data Sanitization
             $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
-
             $email = $data['email'] ?? '';
             $password = $_POST['password'] ?? '';
 
             $user = $this->userModel->findByEmail($email);
 
             if (!$user) {
-                return $this->view('auth/login', [
+                $this->view('auth/login', [
                     'error' => "Email not found.",
                     'data' => $data
                 ]);
+                return;
             }
 
-            /**
-             * Check account lock
-             */
+            // Check Account Lock Status
             if ($user['lock_until'] && strtotime($user['lock_until']) > time()) {
-
                 $diff = strtotime($user['lock_until']) - time();
                 $minutes = ceil($diff / 60);
 
-                return $this->view('auth/login', [
+                $this->view('auth/login', [
                     'error' => "Account locked. Try again in $minutes minutes.",
                     'data' => $data
                 ]);
+                return;
             }
 
-            /**
-             * Verify password
-             */
+            // Verify Password
             if (!password_verify($password, $user['password_hash'])) {
-                return $this->handleFailedAttempt($user, $data);
+                $this->handleFailedAttempt($user, $data);
+                return;
             }
 
-            /**
-             * Check email verification
-             */
-            if ((int)$user['status'] === 0) {
-                return $this->view('auth/login', [
+            // Check Email Verification Status
+            if (isset($user['status']) && (int)$user['status'] === 0) {
+                $this->view('auth/login', [
                     'error' => "Please verify your email first!",
                     'data' => $data
                 ]);
+                return;
             }
 
-            /**
-             * Success
-             */
+            // Authentication Success
             $this->userModel->resetAttempts($user['id']);
 
             $_SESSION['user_id'] = $user['id'];
@@ -97,130 +100,91 @@ class AuthController extends Controller
             exit;
 
         } catch (Throwable $e) {
-
-            error_log(
-                date('Y-m-d H:i:s') .
-                " > AuthController > login > " .
-                $e->getMessage()
-            );
-
-            return $this->view('auth/login', [
-                'error' => "Something went wrong. Please try again."
-            ]);
+            $this->logError('Login', $e);
+            $this->view('auth/login', ['error' => "Something went wrong. Please try again."]);
+            exit;
         }
     }
 
     /**
-     * Handle failed login attempts
+     * Handle failed login attempts and trigger lockout if necessary.
      */
-    private function handleFailedAttempt(array $user, array $data): mixed
+    private function handleFailedAttempt(array $user, array $data): void
     {
         $attempts = (int)$user['wrong_attempts'] + 1;
         $lockUntil = null;
 
         if ($attempts >= $this->maxAttempts) {
-
-            $lockUntil = date(
-                'Y-m-d H:i:s',
-                strtotime("+{$this->lockMinutes} minutes")
-            );
-
-            /**
-             * Send security alert to owner
-             */
+            $lockUntil = date('Y-m-d H:i:s', strtotime("+{$this->lockMinutes} minutes"));
             $this->sendSecurityAlert($user['email']);
         }
 
         $this->userModel->updateLoginAttempts($user['id'], $attempts, $lockUntil);
 
         $remaining = $this->maxAttempts - $attempts;
-
         $msg = ($remaining > 0)
             ? "Invalid password. $remaining attempts left."
             : "Account locked for {$this->lockMinutes} minutes due to multiple failed attempts.";
 
-        return $this->view('auth/login', [
+        $this->view('auth/login', [
             'error' => $msg,
             'data' => $data
         ]);
     }
 
     /**
-     * Handle user registration
+     * Handle user registration with password complexity validation.
      */
-    public function register(): mixed
+    public function register(): void
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            return $this->view('auth/register');
+            $this->view('auth/register');
+            return;
         }
 
         try {
-
             $raw_data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
-
             $password = $_POST['password'] ?? '';
             $confirmPassword = $_POST['confirm_password'] ?? '';
 
-            /**
-             * Password validation
-             */
+            // Password Complexity Validation
             if (!preg_match('/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/', $password)) {
-                return $this->view('auth/register', [
-                    'error' => 'Password must be 8+ chars with letters & numbers.'
-                ]);
+                $this->view('auth/register', ['error' => 'Password must be 8+ chars with letters & numbers.', 'data' => $raw_data]);
+                return;
             }
 
             if ($password !== $confirmPassword) {
-                return $this->view('auth/register', [
-                    'error' => 'Passwords do not match!'
-                ]);
+                $this->view('auth/register', ['error' => 'Passwords do not match!', 'data' => $raw_data]);
+                return;
             }
 
             if ($this->userModel->findByEmail($raw_data['email'])) {
-                return $this->view('auth/register', [
-                    'error' => 'Email already registered.'
-                ]);
+                $this->view('auth/register', ['error' => 'Email already registered.', 'data' => $raw_data]);
+                return;
             }
 
-            /**
-             * Generate email verification token
-             */
+            // Security Token Generation
             $verificationToken = bin2hex(random_bytes(32));
-
             $raw_data['password_hash'] = password_hash($password, PASSWORD_BCRYPT);
             $raw_data['verification_token'] = $verificationToken;
 
             if ($this->userModel->create($raw_data)) {
-
-                /**
-                 * Send verification email
-                 */
                 $this->sendVerificationEmail($raw_data['email'], $verificationToken);
-
                 header('Location: /login?registered=1');
                 exit;
             }
 
-            return $this->view('auth/register', [
-                'error' => 'Registration failed. Please contact support.'
-            ]);
+            $this->view('auth/register', ['error' => 'Registration failed. Please contact support.', 'data' => $raw_data]);
 
         } catch (Throwable $e) {
-
-            error_log(
-                date('Y-m-d H:i:s') .
-                " > AuthController > register > " .
-                $e->getMessage()
-            );
-
-            return $this->view('auth/register', [
-                'error' => "Internal server error."
-            ]);
+            $this->logError('Register', $e);
+            $this->view('auth/register', ['error' => "Internal server error."]);
+            exit;
         }
     }
 
     /**
-     * Email verification
+     * Handle email verification from token link.
      */
     public function verify(): void
     {
@@ -232,65 +196,47 @@ class AuthController extends Controller
         }
 
         if ($this->userModel->verifyEmail($token)) {
-            echo "Email verified successfully. You can now login.";
+            header('Location: /login?verified=1');
         } else {
-            echo "Verification failed.";
+            echo "Verification failed or token expired.";
         }
+        exit;
     }
 
     /**
-     * Send verification email
+     * Send verification email to the user.
      */
     private function sendVerificationEmail(string $email, string $token): void
     {
-        $link = "http://localhost/verify?token=$token";
+        $baseUrl = rtrim(Env::get('APP_URL', 'http://localhost'), '/');
+        $link = "{$baseUrl}/verify?token={$token}";
 
         $subject = "Verify Your Email";
+        $message = "<h3>Email Verification</h3><p>Please click the link below to verify your account:</p><a href='$link'>$link</a>";
 
-        $message = "
-        <h3>Email Verification</h3>
-        <p>Please click the link below to verify your account:</p>
-        <a href='$link'>$link</a>
-        ";
-
-        $headers = "MIME-Version: 1.0\r\n";
-        $headers .= "Content-type:text/html;charset=UTF-8\r\n";
-        $headers .= "From: no-reply@inventorysystem.com";
-
+        $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: no-reply@inventorysystem.com";
         mail($email, $subject, $message, $headers);
     }
 
     /**
-     * Send security alert to owner
-     */
-    private function sendSecurityAlert(string $userEmail): void
-    {
-        $ownerEmail = "owner@inventorysystem.com";
-
-        $subject = "Security Alert: Multiple Failed Login Attempts";
-
-        $message = "
-        Warning!
-
-        Multiple failed login attempts detected.
-
-        User Email: $userEmail
-        Time: " . date('Y-m-d H:i:s') . "
-        IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "
-        ";
-
-        mail($ownerEmail, $subject, $message);
-    }
-
-    /**
-     * Logout user
+     * Logout user and clear session.
      */
     public function logout(): void
     {
         session_unset();
         session_destroy();
-
         header('Location: /login');
         exit;
+    }
+
+    /**
+     * Standardized error logging logic.
+     */
+    private function logError(string $action, Throwable $e): void
+    {
+        error_log(sprintf(
+            "[%s] AuthController %s Error: %s in %s on line %d",
+            date('Y-m-d H:i:s'), $action, $e->getMessage(), $e->getFile(), $e->getLine()
+        ));
     }
 }

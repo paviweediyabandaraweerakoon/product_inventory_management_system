@@ -7,116 +7,91 @@ use PDO;
 
 /**
  * Class User
- * Handles all database operations related to the user entity.
- * * @package App\Models
+ * Handles all database operations related to the user entity including
+ * authentication data, account locking, and registration.
  */
 class User extends Model
 {
-    /**
-     * @var string Table name for this model
-     */
+    /** @var string Table name for this model */
     protected string $table = 'users';
 
     /**
      * Finds a user by their email address.
-     * Only returns users where deleted_at is NULL (Soft delete check).
-     *
-     * @param string $email
-     * @return array|false
+     * Ensures only active (non-deleted) users are retrieved.
      */
     public function findByEmail(string $email): array|false
     {
-        // Supervisor Feedback: Ensure deleted_at IS NULL is checked
-        $sql = "SELECT * FROM {$this->table} WHERE email = :email AND deleted_at IS NULL LIMIT 1";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute(['email' => $email]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $sql = "SELECT * FROM {$this->table} WHERE email = ? AND deleted_at IS NULL LIMIT 1";
+        return $this->query($sql, [$email])->fetch(PDO::FETCH_ASSOC);
     }
 
     /**
      * Updates failed login attempts and sets lockout time.
-     *
-     * @param int $id
-     * @param int $attempts
-     * @param string|null $lockUntil
-     * @return bool
      */
     public function updateLoginAttempts(int $id, int $attempts, ?string $lockUntil = null): bool
     {
         $sql = "UPDATE {$this->table} 
-                SET wrong_attempts = :wa, lock_until = :lu 
-                WHERE id = :id AND deleted_at IS NULL";
+                SET wrong_attempts = ?, lock_until = ? 
+                WHERE id = ? AND deleted_at IS NULL";
 
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
-            'wa' => $attempts,
-            'lu' => $lockUntil,
-            'id' => $id
-        ]);
+        return $this->query($sql, [$attempts, $lockUntil, $id])->rowCount() > 0;
     }
 
     /**
-     * Resets failed login attempts for a user.
-     *
-     * @param int $id
-     * @return bool
+     * Resets failed login attempts for a user after successful login.
      */
     public function resetAttempts(int $id): bool
     {
         $sql = "UPDATE {$this->table} 
                 SET wrong_attempts = 0, lock_until = NULL 
-                WHERE id = :id AND deleted_at IS NULL";
+                WHERE id = ? AND deleted_at IS NULL";
 
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute(['id' => $id]);
+        return $this->query($sql, [$id])->rowCount() > 0;
     }
 
     /**
-     * Creates a new user record in the database.
-     * Sanitizes name input and handles verification token.
-     *
-     * @param array $data Contains full_name, email, password_hash, verification_token
-     * @return bool
+     * Registers a new user.
+     * Sanitizes full name and maps it to first/last name fields.
      */
-    public function createUser(array $data): bool
+    public function create(array $data): string|false
     {
-        // Sanitize name split logic
-        $name = trim((string)$data['full_name']);
-        $parts = explode(' ', $name, 2);
-        $first = $parts[0];
-        $last = $parts[1] ?? '';
+        // Name split logic (Professional handling)
+        $fullName = trim((string)($data['full_name'] ?? ''));
+        $nameParts = explode(' ', $fullName, 2);
+        $firstName = $nameParts[0];
+        $lastName = $nameParts[1] ?? '';
 
-        $sql = "INSERT INTO {$this->table}
-                (first_name, last_name, email, password_hash, role_id, status, verification_token, created_at)
-                VALUES(:first, :last, :email, :pass, :role, :status, :token, NOW())";
+        $insertData = [
+            'first_name'         => htmlspecialchars($firstName),
+            'last_name'          => htmlspecialchars($lastName),
+            'email'              => htmlspecialchars($data['email']),
+            'password_hash'      => $data['password_hash'],
+            'role_id'            => 2, // Default: User
+            'status'             => 0, // Default: Unverified
+            'verification_token' => $data['verification_token'],
+            'created_at'         => date('Y-m-d H:i:s')
+        ];
 
-        $stmt = $this->db->prepare($sql);
+        // Core Model එකේ තියෙන logic එකට අනුව column names ටික වෙන් කරගන්නවා
+        $columns = implode(', ', array_keys($insertData));
+        $placeholders = implode(', ', array_fill(0, count($insertData), '?'));
 
-        // Role 2 = User, Status 0 = Pending/Unverified
-        return $stmt->execute([
-            'first'  => htmlspecialchars($first),
-            'last'   => htmlspecialchars($last),
-            'email'  => htmlspecialchars($data['email']),
-            'pass'   => $data['password_hash'],
-            'role'   => 2,
-            'status' => 0,
-            'token'  => $data['verification_token']
-        ]);
+        $sql = "INSERT INTO {$this->table} ($columns) VALUES ($placeholders)";
+        
+        $this->query($sql, array_values($insertData));
+        
+        return $this->db->lastInsertId();
     }
 
     /**
      * Verifies user email via token and activates the account.
-     *
-     * @param string $token
-     * @return bool
      */
     public function verifyEmail(string $token): bool
     {
         $sql = "UPDATE {$this->table}
                 SET status = 1, email_verified_at = NOW(), verification_token = NULL
-                WHERE verification_token = :token AND deleted_at IS NULL";
+                WHERE verification_token = ? AND deleted_at IS NULL";
 
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute(['token' => $token]);
+        return $this->query($sql, [$token])->rowCount() > 0;
     }
 }
