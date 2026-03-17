@@ -25,8 +25,9 @@ $router->get('/dashboard', [DashboardController::class, 'index']);
 $router->get('/categories', [CategoryController::class, 'index']);
 $router->get('/categories/create', [CategoryController::class, 'create']);
 $router->post('/categories/store', [CategoryController::class, 'store']);
-$router->get('/categories/edit/{id}', [CategoryController::class, 'edit']);
-$router->post('/categories/update/{id}', [CategoryController::class, 'update']);
+$router->get('/categories/{id}/edit', [CategoryController::class, 'edit']);
+$router->post('/categories/{id}', [CategoryController::class, 'update']);
+$router->post('/categories/delete/{id}', [CategoryController::class, 'destroy']);
 
 /** * Using POST for delete to improve security and follow REST principles. 
  * This prevents accidental deletions via simple GET requests.
