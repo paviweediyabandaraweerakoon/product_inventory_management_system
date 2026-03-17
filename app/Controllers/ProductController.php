@@ -3,15 +3,15 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Models\Product;
 use App\Models\Category;
+use App\Models\Product;
 use App\Requests\ProductRequest;
-use App\Core\Env;
 use Throwable;
 
 /**
  * Class ProductController
- * Manages product lifecycle with input sanitization and soft-delete handling.
+ * Manages product lifecycle operations including listing, creation,
+ * validation, and soft-delete handling.
  */
 class ProductController extends Controller
 {
@@ -25,35 +25,50 @@ class ProductController extends Controller
         $this->categoryModel = new Category();
     }
 
+    /**
+     * Display all active products.
+     */
     public function index(): void
     {
         try {
             $products = $this->productModel->all();
+
             $this->view('products/index', [
                 'products' => $products,
-                'title' => 'Product List'
+                'title'    => 'Product List',
             ]);
+
         } catch (Throwable $e) {
             $this->logError('Index', $e);
+            http_response_code(500);
             $this->view('errors/500');
             exit;
         }
     }
 
+    /**
+     * Show product creation form with available categories.
+     */
     public function create(): void
     {
         try {
             $categories = $this->categoryModel->all();
+
             $this->view('products/create', [
-                'categories' => $categories
+                'categories' => $categories,
             ]);
+
         } catch (Throwable $e) {
             $this->logError('Create View', $e);
+            http_response_code(500);
             $this->view('errors/500');
             exit;
         }
     }
 
+    /**
+     * Store a newly created product after validation.
+     */
     public function store(): void
     {
         try {
@@ -62,70 +77,57 @@ class ProductController extends Controller
                 return;
             }
 
-            // Input Handling: Trim and sanitize all inputs
-            $data = array_map(fn($v) => trim((string)$v), $_POST);
+            // Trim all scalar inputs
+            $data = array_map(
+                fn ($value) => is_scalar($value) ? trim((string) $value) : '',
+                $_POST
+            );
+
             $request = new ProductRequest($data);
 
             if (!$request->validate()) {
                 $this->view('products/create', [
-                    'errors' => $request->getErrors(),
+                    'errors'     => $request->getErrors(),
                     'categories' => $this->categoryModel->all(),
-                    'old' => $data
+                    'old'        => $data,
                 ]);
                 return;
             }
 
             $this->productModel->create([
                 'product_name'   => $data['product_name'],
-                'category_id'    => $data['category_id'],
-                'price'          => $data['price'],
-                'stock_quantity' => $data['stock_quantity'],
-                'status'         => 'active'
+                'category_id'    => (int) $data['category_id'],
+                'price'          => (float) $data['price'],
+                'stock_quantity' => (int) $data['stock_quantity'],
+                'status'         => 'active',
             ]);
 
             $this->redirect('/products?success=created');
 
         } catch (Throwable $e) {
             $this->logError('Store', $e);
+            http_response_code(500);
             $this->view('errors/500');
             exit;
         }
     }
 
+    /**
+     * Soft delete a product by ID.
+     *
+     * @param string $id
+     */
     public function destroy(string $id): void
     {
         try {
-            $this->productModel->delete((int)$id);
+            $this->productModel->delete((int) $id);
             $this->redirect('/products?success=deleted');
+
         } catch (Throwable $e) {
-            $this->logError('Delete', $e);
+            $this->logError('Destroy', $e);
+            http_response_code(500);
             $this->view('errors/500');
             exit;
         }
-    }
-
-    /**
-     * Helper for URL redirection with base URL handling from .env configuration
-     */
-    private function redirect(string $path): void
-    {
-        $baseUrl = rtrim(Env::get('APP_URL'), '/');
-        header('Location: ' . $baseUrl . '/' . ltrim($path, '/'));
-        exit;
-    }
-
-    /**
-     * Standardized error logging
-     */
-    private function logError(string $action, Throwable $e): void
-    {
-        error_log(sprintf(
-            "[%s] ProductController %s Error: %s in %s on line %d",
-            date('Y-m-d H:i:s'),
-            $action,
-            $e->getMessage(),
-            $e->getFile(),
-            $e->getLine()
-        ));
     }
 }
