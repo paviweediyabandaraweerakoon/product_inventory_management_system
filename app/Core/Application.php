@@ -19,7 +19,7 @@ class Application
      */
     public function __construct()
     {
-        // Initialize the router
+        // Keeping it consistent with your project's current structure
         $this->router = new Router();
     }
 
