@@ -5,7 +5,9 @@ namespace App\Helpers;
 class SecurityHelper
 {
     /**
-     * Sanitize input array for safe display / processing.
+     * Sanitize input array for safe display and processing.
+     * * @param array $input
+     * @return array
      */
     public static function sanitize(array $input): array
     {
@@ -17,6 +19,9 @@ class SecurityHelper
 
     /**
      * Split full name into first and last names.
+     * Returns a default '-' for the last name if not provided.
+     * * @param string $fullName
+     * @return array
      */
     public static function splitName(string $fullName): array
     {
@@ -28,23 +33,27 @@ class SecurityHelper
     }
 
     /**
-     * Generate a secure 6-digit OTP code.
+     * Generate a secure 6-digit numeric OTP.
+     * * @return string
      */
     public static function generateOtp(): string
     {
-        return (string) random_int(100000, 999999);
+        try {
+            return (string) random_int(100000, 999999);
+        } catch (\Exception $e) {
+            // Fallback for environments with low entropy
+            return str_pad((string) mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+        }
     }
 
     /**
-     * Generate CSRF token and store in session.
+     * Generate or retrieve a CSRF token from the session.
+     * * @param bool $refresh Force generation of a new token.
+     * @return string
      */
-    public static function generateCsrfToken(): string
+    public static function generateCsrfToken(bool $refresh = false): string
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
-        if (empty($_SESSION['csrf_token'])) {
+        if (empty($_SESSION['csrf_token']) || $refresh) {
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
 
@@ -52,28 +61,25 @@ class SecurityHelper
     }
 
     /**
-     * Validate CSRF token from POST request.
+     * Validate a CSRF token against the session store.
+     * * @param string|null $token
+     * @return bool
      */
     public static function validateCsrfToken(?string $token): bool
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
-        if (empty($_SESSION['csrf_token']) || !$token) {
+        if (empty($_SESSION['csrf_token']) || empty($token)) {
             return false;
         }
 
-        $isValid = hash_equals($_SESSION['csrf_token'], $token);
-
-        // Optional: one-time use
-        unset($_SESSION['csrf_token']);
-
-        return $isValid;
+        // Use hash_equals to prevent timing attacks
+        return hash_equals($_SESSION['csrf_token'], $token);
     }
 
     /**
-     * Strong password validator
+     * Comprehensive password strength validator.
+     * Minimum 8 characters, at least one uppercase, one lowercase, one number, and one special character.
+     * * @param string $password
+     * @return bool
      */
     public static function isStrongPassword(string $password): bool
     {

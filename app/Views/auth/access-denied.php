@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+/* Check if the user is logged in */
 
 $message = $_SESSION['flash_message'] ?? ($message ?? 'You do not have permission to log in.');
 unset($_SESSION['flash_message']);

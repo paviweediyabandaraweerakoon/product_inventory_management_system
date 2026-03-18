@@ -3,46 +3,38 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Core\Env;
-use App\Models\User;
-use App\Services\NotificationService;
+use App\Services\AuthService;
 use App\Helpers\SecurityHelper;
-use App\Helpers\MailHelper;
 use App\Request\AuthRequest;
 use Throwable;
 
 /**
  * Class AuthController
- * Handles authentication: login, register, logout
+ * * Handles user authentication processes including login, registration, and logout.
+ * Acts as a mediator between the AuthRequest validation and AuthService logic.
+ * * @package App\Controllers
  */
 class AuthController extends Controller
 {
-    private User $userModel;
-    private NotificationService $notificationService;
-    private int $maxAttempts;
-    private int $lockMinutes;
-    private int $otpExpiryMinutes;
-    private int $defaultRoleId;
+    /**
+     * @var AuthService The service handling core authentication logic.
+     */
+    private AuthService $authService;
 
     /**
-     * Initialize controller dependencies and settings.
+     * AuthController constructor.
+     * Initializes the controller and its dependencies.
      */
     public function __construct()
     {
         parent::__construct();
-        $this->userModel = new User();
-        $this->notificationService = new NotificationService();
-
-        $this->maxAttempts = (int)Env::get('AUTH_MAX_ATTEMPTS', 3);
-        $this->lockMinutes = (int)Env::get('AUTH_LOCK_MINUTES', 15);
-        $this->otpExpiryMinutes = (int)Env::get('AUTH_OTP_EXPIRY_MINUTES', 10);
-        $this->defaultRoleId = (int)Env::get('AUTH_DEFAULT_STAFF_ROLE_ID', 3);
+        $this->authService = new AuthService();
     }
 
     /**
-     * Handle login requests.
-     *
-     * @return void
+     * Handles the login request.
+     * Displays the login view for GET requests and processes credentials for POST requests.
+     * * @return void
      */
     public function login(): void
     {
@@ -51,53 +43,57 @@ class AuthController extends Controller
             return;
         }
 
+        // Basic sanitization of the POST global
         $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
 
-        // CSRF Validation
-        $csrfToken = $data['csrf_token'] ?? '';
-        if (!SecurityHelper::validateCsrfToken($csrfToken)) {
-            $this->view('auth/login', ['error' => 'Invalid CSRF token.', 'data' => $data]);
+        // Validate CSRF Integrity
+        if (!SecurityHelper::validateCsrfToken($data['csrf_token'] ?? '')) {
+            $this->view('auth/login', [
+                'error' => 'Security token expired. Please refresh and try again.',
+                'data'  => $data
+            ]);
             return;
         }
 
         $request = new AuthRequest($data);
         $errors = $request->validateLogin();
-        if ($errors) {
-            $this->view('auth/login', ['error' => reset($errors), 'data' => $data]);
+
+        if (!empty($errors)) {
+            $this->view('auth/login', [
+                'error' => reset($errors),
+                'data'  => $data
+            ]);
             return;
         }
 
-        $sanitized = $request->sanitized();
-
         try {
-            $user = $this->userModel->findByEmail($sanitized['email']);
+            $sanitized = $request->sanitized();
+            $result = $this->authService->authenticate($sanitized['email'], $sanitized['password']);
 
-            if (!$user || !password_verify($sanitized['password'], $user['password_hash'])) {
-                $this->handleFailedLogin($user);
+            if (!$result['success']) {
+                if (isset($result['redirect'])) {
+                    $this->redirect($result['redirect']);
+                    return;
+                }
+                $this->view('auth/login', [
+                    'error' => $result['error'],
+                    'data'  => $data
+                ]);
                 return;
             }
 
-            if (!$this->userModel->isEmailVerified($user)) {
-                $this->redirect('/verify-otp?email=' . urlencode($sanitized['email']));
-                return;
-            }
-
-            $this->userModel->resetLoginAttempts((int)$user['id']);
-            $this->setSession($user);
+            $this->setSession($result['user']);
             $this->redirect('/dashboard');
 
         } catch (Throwable $e) {
-            error_log("Login Error: " . $e->getMessage());
-            http_response_code(500);
-            require_once __DIR__ . '/../Views/errors/500.php';
-            exit;
+            $this->handleError("Login Error", $e);
         }
     }
 
     /**
-     * Handle registration requests.
-     *
-     * @return void
+     * Handles the registration request.
+     * Displays the registration view for GET requests and processes new user data for POST requests.
+     * * @return void
      */
     public function register(): void
     {
@@ -108,61 +104,46 @@ class AuthController extends Controller
 
         $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
 
-        // CSRF Validation
-        $csrfToken = $data['csrf_token'] ?? '';
-        if (!SecurityHelper::validateCsrfToken($csrfToken)) {
-            $this->view('auth/register', ['error' => 'Invalid CSRF token.', 'data' => $data]);
+        if (!SecurityHelper::validateCsrfToken($data['csrf_token'] ?? '')) {
+            $this->view('auth/register', [
+                'error' => 'Security token invalid.',
+                'data'  => $data
+            ]);
             return;
         }
 
         $request = new AuthRequest($data);
         $errors = $request->validateRegister();
-        if ($errors) {
-            $this->view('auth/register', ['error' => reset($errors), 'data' => $data]);
+
+        if (!empty($errors)) {
+            $this->view('auth/register', [
+                'error' => reset($errors),
+                'data'  => $data
+            ]);
             return;
         }
-
-        $sanitized = $request->sanitized();
-
-        if ($this->userModel->emailExists($sanitized['email'])) {
-            $this->view('auth/register', ['error' => 'Email already exists.', 'data' => $sanitized]);
-            return;
-        }
-
-        [$firstName, $lastName] = SecurityHelper::splitName($sanitized['full_name']);
-        $otp = SecurityHelper::generateOtp();
-        $otpExpiresAt = date('Y-m-d H:i:s', strtotime("+{$this->otpExpiryMinutes} minutes"));
 
         try {
-            $userId = $this->userModel->createUser([
-                'first_name' => $firstName,
-                'last_name' => $lastName,
-                'email' => $sanitized['email'],
-                'password_hash' => password_hash($sanitized['password'], PASSWORD_BCRYPT),
-                'role_id' => $this->defaultRoleId,
-                'status' => 1,
-                'can_login' => 1,
-                'wrong_attempts' => 0,
-                'lockout_duration' => $this->lockMinutes,
-                'email_verification_otp' => $otp,
-                'email_verification_otp_expires_at' => $otpExpiresAt,
+            $sanitized = $request->sanitized();
+            
+            if ($this->authService->registerUser($sanitized)) {
+                $this->redirect('/verify-otp?email=' . urlencode($sanitized['email']));
+                return;
+            }
+
+            $this->view('auth/register', [
+                'error' => 'An error occurred during registration. Please try again.',
+                'data'  => $data
             ]);
 
-            $this->notificationService->sendVerificationOtpEmail($sanitized['email'], $firstName, $otp, $this->otpExpiryMinutes);
-            $this->redirect('/verify-otp?email=' . urlencode($sanitized['email']));
-
         } catch (Throwable $e) {
-            error_log("Registration Error: " . $e->getMessage());
-            http_response_code(500);
-            require_once __DIR__ . '/../Views/errors/500.php';
-            exit;
+            $this->handleError("Registration Error", $e);
         }
     }
 
     /**
-     * Logout the user and destroy session.
-     *
-     * @return void
+     * Destroys the user session and logs the user out.
+     * * @return void
      */
     public function destroy(): void
     {
@@ -171,12 +152,9 @@ class AuthController extends Controller
         $this->redirect('/login');
     }
 
-    /** ---------------------- PRIVATE HELPERS ---------------------- */
-
     /**
-     * Set session data for logged-in user.
-     *
-     * @param array $user
+     * Sets the authenticated user's session data.
+     * * @param array $user Associative array containing user details.
      * @return void
      */
     private function setSession(array $user): void
@@ -187,27 +165,16 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle failed login attempts with lockout mechanism.
-     *
-     * @param array|null $user
+     * Logs errors and displays a generic server error page.
+     * * @param string $context The context or location where the error occurred.
+     * @param Throwable $e The caught exception or error.
      * @return void
      */
-    private function handleFailedLogin(?array $user): void
+    private function handleError(string $context, Throwable $e): void
     {
-        $attempts = ($user['wrong_attempts'] ?? 0) + 1;
-        $lockUntil = $attempts >= $this->maxAttempts
-            ? date('Y-m-d H:i:s', strtotime("+{$this->lockMinutes} minutes"))
-            : null;
-
-        if ($user) {
-            $this->userModel->updateLoginAttempts((int)$user['id'], $attempts, $lockUntil);
-            if ($lockUntil) MailHelper::securityAlert($user['email']);
-        }
-
-        $message = $lockUntil
-            ? "Account locked for {$this->lockMinutes} mins."
-            : "Invalid credentials. " . max(0, $this->maxAttempts - $attempts) . " attempts left.";
-
-        $this->view('auth/login', ['error' => $message, 'data' => $user ?? []]);
+        error_log("[$context] " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+        http_response_code(500);
+        require_once __DIR__ . '/../Views/errors/500.php';
+        exit;
     }
 }

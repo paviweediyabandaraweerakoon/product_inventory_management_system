@@ -1,36 +1,39 @@
 <?php
+
 namespace App\Request;
 
-// Class AuthRequest
-// Handles validation and sanitization of authentication-related requests (login, register).
-
+/**
+ * Class AuthRequest
+ * Handles validation and sanitization of authentication-related input data.
+ */
 class AuthRequest
 {
+    /** @var array The raw input data from the request. */
     private array $data;
+
+    /** @var array Storage for validation error messages. */
     private array $errors = [];
 
+    /**
+     * AuthRequest constructor.
+     * @param array $postData The $_POST data or equivalent input array.
+     */
     public function __construct(array $postData)
     {
-        session_start();
         $this->data = $postData;
-        $this->verifyCsrf();
     }
 
-    private function verifyCsrf(): void
-    {
-        $token = $this->data['csrf_token'] ?? '';
-        if (!isset($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $token)) {
-            die('Invalid CSRF token.');
-        }
-    }
-
+    /**
+     * Validates login input credentials.
+     * @return array Returns an associative array of errors, empty if valid.
+     */
     public function validateLogin(): array
     {
         $email = trim($this->data['email'] ?? '');
         $password = trim($this->data['password'] ?? '');
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->errors['email'] = 'Invalid email address.';
+            $this->errors['email'] = 'A valid email address is required.';
         }
 
         if (empty($password)) {
@@ -40,13 +43,10 @@ class AuthRequest
         return $this->errors;
     }
 
-    
     /**
-     * Validates registration input data and returns an array of errors if any.
-     *
-     * @return array Associative array of field errors (e.g., ['email' => 'Invalid email'])
+     * Validates registration input data with detailed error messages.
+     * @return array Returns an associative array of errors.
      */
-
     public function validateRegister(): array
     {
         $fullName = trim($this->data['full_name'] ?? '');
@@ -55,28 +55,40 @@ class AuthRequest
         $confirmPassword = trim($this->data['confirm_password'] ?? '');
         $phone = trim($this->data['phone_number'] ?? '');
 
-        if (!$fullName) $this->errors['full_name'] = 'Full name required.';
-        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) $this->errors['email'] = 'Invalid email.';
-        if (!$password || strlen($password) < 8) $this->errors['password'] = 'Password must be 8+ chars.';
-        if ($password !== $confirmPassword) $this->errors['confirm_password'] = 'Passwords do not match.';
-        if ($phone && !preg_match('/^\+?\d{9,15}$/', $phone)) $this->errors['phone_number'] = 'Invalid phone number.';
+        if (empty($fullName)) {
+            $this->errors['full_name'] = 'Full name is required to create an account.';
+        }
+
+        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->errors['email'] = 'Please provide a valid corporate or personal email.';
+        }
+
+        if (empty($password) || strlen($password) < 8) {
+            $this->errors['password'] = 'Password must be at least 8 characters for better security.';
+        }
+
+        if ($password !== $confirmPassword) {
+            $this->errors['confirm_password'] = 'The confirmation password does not match.';
+        }
+
+        if (!empty($phone) && !preg_match('/^\+?\d{9,15}$/', $phone)) {
+            $this->errors['phone_number'] = 'The phone number format is invalid.';
+        }
 
         return $this->errors;
     }
 
     /**
-     * Returns the sanitized input data.
-     *
+     * Returns the sanitized and filtered input data.
      * @return array
      */
-    
     public function sanitized(): array
     {
         return [
-            'full_name' => htmlspecialchars($this->data['full_name'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'email' => htmlspecialchars($this->data['email'] ?? '', ENT_QUOTES, 'UTF-8'),
-            'password' => $this->data['password'] ?? '',
-            'phone_number' => htmlspecialchars($this->data['phone_number'] ?? '', ENT_QUOTES, 'UTF-8'),
+            'full_name'    => htmlspecialchars(trim($this->data['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'),
+            'email'        => filter_var(trim($this->data['email'] ?? ''), FILTER_SANITIZE_EMAIL),
+            'password'     => $this->data['password'] ?? '', 
+            'phone_number' => htmlspecialchars(trim($this->data['phone_number'] ?? ''), ENT_QUOTES, 'UTF-8'),
         ];
     }
 }

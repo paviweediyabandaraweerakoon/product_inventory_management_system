@@ -22,8 +22,8 @@ $csrfToken = SecurityHelper::generateCsrfToken();
     <title><?= htmlspecialchars($title ?? 'Inventory Pro', ENT_QUOTES, 'UTF-8') ?></title>
 
     <!-- Local assets -->
-    <link href="/public/assets/css/output.css" rel="stylesheet">
-    <script src="/public/assets/js/lucide.js"></script>
+    <link href="/assets/css/output.css" rel="stylesheet">
+    <script src="/assets/js/lucide.js"></script>
 
     <style>
         .glass-card {

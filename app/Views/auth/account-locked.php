@@ -3,6 +3,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/** @var string $message */
+/* Check if the user is logged in */
 $message = $_SESSION['flash_message'] ?? ($message ?? 'Your account is currently locked.');
 unset($_SESSION['flash_message']);
 
