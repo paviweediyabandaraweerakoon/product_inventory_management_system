@@ -4,6 +4,14 @@
 
 # Environment Files
 .env
+# Dependency Directories
+/vendor/
+/node_modules/
+
+# Environment Files
+.env
+.env.local
+.env.*.local
 
 # Logs
 storage/logs/
@@ -15,29 +23,6 @@ storage/uploads/
 .temp/
 .tmp/
 
-<<<<<<< HEAD
-# =========================
-# OS generated files
-# =========================
-.DS_Store
-Thumbs.db
-
-# =========================
-# IDE / Editor files
-# =========================
-.vscode/
-.idea/
-*.sublime-workspace
-*.sublime-project
-
-# =========================
-# Temporary files
-# =========================
-*.log
-*.tmp
-*.cache
-*.swp
-=======
 # Package Lock Files
 package-lock.json
 composer.lock
@@ -49,4 +34,25 @@ Thumbs.db
 # IDE Specific Files (VS Code / PHPStorm)
 .vscode/
 .idea/
->>>>>>> dev
+
+# Logs
+storage/logs/
+*.log
+
+# Uploads & Temp Files
+storage/uploads/
+/public/uploads/
+.temp/
+.tmp/
+
+# Package Lock Files
+package-lock.json
+composer.lock
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# IDE Specific Files (VS Code / PHPStorm)
+.vscode/
+.idea/

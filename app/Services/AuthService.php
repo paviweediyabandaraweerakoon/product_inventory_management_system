@@ -1,146 +1,212 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
-use App\Models\User;
 use App\Core\Env;
 use App\Helpers\SecurityHelper;
-use App\Helpers\MailHelper;
-use Throwable;
+use App\Models\User;
 
 /**
- * Class AuthService
- * * Handles core business logic for user authentication, registration, 
- * and login attempt management.
+ * Handles authentication and registration business logic.
  */
 class AuthService
 {
-    /** @var User The user data access model. */
     private User $userModel;
-
-    /** @var NotificationService Service for sending emails and notifications. */
     private NotificationService $notificationService;
-
-    /** @var int Maximum allowed failed login attempts before lockout. */
     private int $maxAttempts;
-
-    /** @var int Duration of account lockout in minutes. */
-    private int $lockMinutes;
-
-    /** @var int Validity period of OTP in minutes. */
     private int $otpExpiryMinutes;
 
-    /**
-     * AuthService constructor.
-     * Initializes dependencies and loads configuration from environment variables.
-     */
     public function __construct()
     {
         $this->userModel = new User();
         $this->notificationService = new NotificationService();
-        $this->maxAttempts = (int)Env::get('AUTH_MAX_ATTEMPTS', 3);
-        $this->lockMinutes = (int)Env::get('AUTH_LOCK_MINUTES', 15);
-        $this->otpExpiryMinutes = (int)Env::get('AUTH_OTP_EXPIRY_MINUTES', 10);
+        $this->maxAttempts = (int) Env::get('AUTH_MAX_ATTEMPTS', 3);
+        $this->otpExpiryMinutes = (int) Env::get('AUTH_OTP_EXPIRY_MINUTES', 10);
     }
 
     /**
-     * Authenticates a user using email and password.
-     * * @param string $email
+     * Authenticate a user by email and password.
+     *
+     * @param string $email
      * @param string $password
-     * @return array Result containing status, and either user data or error/redirect details.
+     * @return array{
+     *     success: bool,
+     *     user?: array<string, mixed>|null,
+     *     error: string|null,
+     *     redirect: string|null
+     * }
      */
     public function authenticate(string $email, string $password): array
     {
         $user = $this->userModel->findByEmail($email);
 
-        // Verify credentials
-        if (!$user || !password_verify($password, $user['password_hash'])) {
-            return [
-                'success' => false, 
-                'error'   => $this->handleFailedLogin($user), 
-                'user'    => $user
-            ];
+        if ($user === false) {
+            return $this->failureResponse('Invalid email or password.');
         }
 
-        // Check if email is verified
-        if (!$this->userModel->isEmailVerified($user)) {
-            return [
-                'success'  => false, 
-                'redirect' => '/verify-otp?email=' . urlencode($email)
-            ];
+        if (!password_verify($password, (string) $user['password_hash'])) {
+            $this->handleFailedLogin($user);
+
+            return $this->failureResponse('Invalid email or password.');
         }
 
-        // Reset attempts on successful login
-        $this->userModel->resetLoginAttempts((int)$user['id']);
-        
-        return [
-            'success' => true, 
-            'user'    => $user
-        ];
+        $accountValidation = $this->validateUserAccountState($user);
+        if ($accountValidation !== null) {
+            return $accountValidation;
+        }
+
+        $this->userModel->resetLoginAttempts((int) $user['id']);
+
+        return $this->successResponse($user);
     }
 
     /**
-     * Handles the creation of a new user account and triggers verification email.
-     * * @param array $data Sanitized registration data.
-     * @return bool True if registration was successful, false otherwise.
+     * Register a new user and send verification OTP.
+     *
+     * @param array{
+     *     first_name: string,
+     *     last_name: string,
+     *     email: string,
+     *     password: string,
+     *     phone_number: string|null
+     * } $data
+     * @return array{
+     *     success: bool,
+     *     user?: array<string, mixed>|null,
+     *     error: string|null,
+     *     redirect: string|null
+     * }
      */
-    public function registerUser(array $data): bool
+    public function registerUser(array $data): array
     {
-        [$firstName, $lastName] = SecurityHelper::splitName($data['full_name']);
+        if ($this->userModel->findByEmail($data['email']) !== false) {
+            return $this->failureResponse('An account with this email already exists.');
+        }
+
         $otp = SecurityHelper::generateOtp();
         $otpExpiresAt = date('Y-m-d H:i:s', strtotime("+{$this->otpExpiryMinutes} minutes"));
 
         $userId = $this->userModel->createUser([
-            'first_name'                        => $firstName,
-            'last_name'                         => $lastName,
-            'email'                             => $data['email'],
-            'password_hash'                     => password_hash($data['password'], PASSWORD_BCRYPT),
-            'role_id'                           => (int)Env::get('AUTH_DEFAULT_STAFF_ROLE_ID', 3),
-            'status'                            => 1,
-            'can_login'                         => 1,
-            'wrong_attempts'                    => 0,
-            'lockout_duration'                  => $this->lockMinutes,
-            'email_verification_otp'            => $otp,
+            'first_name' => $data['first_name'],
+            'last_name' => $data['last_name'],
+            'email' => $data['email'],
+            'phone_number' => $data['phone_number'],
+            'password_hash' => password_hash($data['password'], PASSWORD_DEFAULT),
+            'role_id' => (int) Env::get('AUTH_DEFAULT_STAFF_ROLE_ID', 3),
+            'status' => 1,
+            'can_login' => 1,
+            'wrong_attempts' => 0,
+            'email_verification_otp' => $otp,
             'email_verification_otp_expires_at' => $otpExpiresAt,
         ]);
 
-        if ($userId) {
-            $this->notificationService->sendVerificationOtpEmail(
-                $data['email'], 
-                $firstName, 
-                $otp, 
-                $this->otpExpiryMinutes
-            );
-            return true;
+        if ($userId <= 0) {
+            return $this->failureResponse('Failed to create account. Please try again.');
         }
 
-        return false;
+        $emailSent = $this->notificationService->sendVerificationOtpEmail(
+            $data['email'],
+            $data['first_name'],
+            $otp,
+            $this->otpExpiryMinutes
+        );
+
+        if (!$emailSent) {
+            error_log(
+                date('Y-m-d H:i:s')
+                . ' > AuthService > Failed to send verification OTP email to '
+                . $data['email']
+            );
+        }
+
+        return [
+            'success' => true,
+            'user' => null,
+            'error' => null,
+            'redirect' => '/verify-otp?email=' . urlencode($data['email']),
+        ];
     }
 
     /**
-     * Manages failed login attempts, updates the lockout status, and sends security alerts.
-     * * @param array|null $user The user record, if found.
-     * @return string Error message to be displayed to the user.
+     * Build a standard success response.
+     *
+     * @param array<string, mixed> $user
+     * @return array{
+     *     success: bool,
+     *     user: array<string, mixed>,
+     *     error: string|null,
+     *     redirect: string|null
+     * }
      */
-    private function handleFailedLogin(?array $user): string
+    private function successResponse(array $user): array
     {
-        if (!$user) {
-            return "Invalid credentials.";
+        return [
+            'success' => true,
+            'user' => $user,
+            'error' => null,
+            'redirect' => null,
+        ];
+    }
+
+    /**
+     * Build a standard failure response.
+     *
+     * @param string $error
+     * @param string|null $redirect
+     * @return array{
+     *     success: bool,
+     *     user: null,
+     *     error: string,
+     *     redirect: string|null
+     * }
+     */
+    private function failureResponse(string $error, ?string $redirect = null): array
+    {
+        return [
+            'success' => false,
+            'user' => null,
+            'error' => $error,
+            'redirect' => $redirect,
+        ];
+    }
+
+    /**
+     * Handle failed login attempt count for an existing user.
+     *
+     * @param array<string, mixed> $user
+     */
+    private function handleFailedLogin(array $user): void
+    {
+        $attempts = ((int) ($user['wrong_attempts'] ?? 0)) + 1;
+        $this->userModel->updateLoginAttempts((int) $user['id'], $attempts);
+    }
+
+    /**
+     * Validate account state before login success.
+     *
+     * @param array<string, mixed> $user
+     * @return array{
+     *     success: bool,
+     *     user: null,
+     *     error: string,
+     *     redirect: string|null
+     * }|null
+     */
+    private function validateUserAccountState(array $user): ?array
+    {
+        if ((int) ($user['can_login'] ?? 1) !== 1) {
+            return $this->failureResponse('Your account is blocked. Contact admin.');
         }
 
-        $attempts = ($user['wrong_attempts'] ?? 0) + 1;
-        $lockUntil = $attempts >= $this->maxAttempts 
-            ? date('Y-m-d H:i:s', strtotime("+{$this->lockMinutes} minutes")) 
-            : null;
-
-        $this->userModel->updateLoginAttempts((int)$user['id'], $attempts, $lockUntil);
-
-        if ($lockUntil) {
-            MailHelper::securityAlert($user['email']);
-            return "Account locked for {$this->lockMinutes} mins due to multiple failed attempts.";
+        if (empty($user['email_verified_at'])) {
+            return $this->failureResponse(
+                'Please verify your email before logging in.',
+                '/verify-otp?email=' . urlencode((string) $user['email'])
+            );
         }
 
-        $remaining = max(0, $this->maxAttempts - $attempts);
-        return "Invalid credentials. You have {$remaining} attempts left.";
+        return null;
     }
 }

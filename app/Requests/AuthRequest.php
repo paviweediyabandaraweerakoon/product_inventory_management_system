@@ -1,22 +1,25 @@
 <?php
 
-namespace App\Request;
+declare(strict_types=1);
+
+namespace App\Requests;
+
+use App\Helpers\SecurityHelper;
 
 /**
- * Class AuthRequest
- * Handles validation and sanitization of authentication-related input data.
+ * Handles validation and normalization of authentication-related request data.
  */
 class AuthRequest
 {
-    /** @var array The raw input data from the request. */
     private array $data;
 
-    /** @var array Storage for validation error messages. */
+    /**
+     * @var array<string, string>
+     */
     private array $errors = [];
 
     /**
-     * AuthRequest constructor.
-     * @param array $postData The $_POST data or equivalent input array.
+     * @param array<string, mixed> $postData
      */
     public function __construct(array $postData)
     {
@@ -24,19 +27,22 @@ class AuthRequest
     }
 
     /**
-     * Validates login input credentials.
-     * @return array Returns an associative array of errors, empty if valid.
+     * Validate login form input.
+     *
+     * @return array<string, string>
      */
     public function validateLogin(): array
     {
-        $email = trim($this->data['email'] ?? '');
-        $password = trim($this->data['password'] ?? '');
+        $this->errors = [];
 
-        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email = trim((string) ($this->data['email'] ?? ''));
+        $password = (string) ($this->data['password'] ?? '');
+
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->errors['email'] = 'A valid email address is required.';
         }
 
-        if (empty($password)) {
+        if ($password === '') {
             $this->errors['password'] = 'Password cannot be empty.';
         }
 
@@ -44,51 +50,77 @@ class AuthRequest
     }
 
     /**
-     * Validates registration input data with detailed error messages.
-     * @return array Returns an associative array of errors.
+     * Validate registration form input.
+     *
+     * @return array<string, string>
      */
     public function validateRegister(): array
     {
-        $fullName = trim($this->data['full_name'] ?? '');
-        $email = trim($this->data['email'] ?? '');
-        $password = trim($this->data['password'] ?? '');
-        $confirmPassword = trim($this->data['confirm_password'] ?? '');
-        $phone = trim($this->data['phone_number'] ?? '');
+        $this->errors = [];
 
-        if (empty($fullName)) {
-            $this->errors['full_name'] = 'Full name is required to create an account.';
+        $fullName = trim((string) ($this->data['full_name'] ?? ''));
+        $email = trim((string) ($this->data['email'] ?? ''));
+        $phone = trim((string) ($this->data['phone_number'] ?? ''));
+        $password = (string) ($this->data['password'] ?? '');
+        $confirmPassword = (string) ($this->data['confirm_password'] ?? '');
+
+        if ($fullName === '') {
+            $this->errors['full_name'] = 'Full name is required.';
         }
 
-        if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->errors['email'] = 'Please provide a valid corporate or personal email.';
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->errors['email'] = 'A valid email address is required.';
         }
 
-        if (empty($password) || strlen($password) < 8) {
-            $this->errors['password'] = 'Password must be at least 8 characters for better security.';
+        if (!SecurityHelper::isValidPassword($password)) {
+            $this->errors['password'] = 'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.';
         }
 
-        if ($password !== $confirmPassword) {
-            $this->errors['confirm_password'] = 'The confirmation password does not match.';
+        if ($confirmPassword === '') {
+            $this->errors['confirm_password'] = 'Please confirm your password.';
+        } elseif ($password !== $confirmPassword) {
+            $this->errors['confirm_password'] = 'Password confirmation does not match.';
         }
 
-        if (!empty($phone) && !preg_match('/^\+?\d{9,15}$/', $phone)) {
-            $this->errors['phone_number'] = 'The phone number format is invalid.';
+        if ($phone !== '' && !preg_match('/^\+?\d{9,15}$/', $phone)) {
+            $this->errors['phone_number'] = 'Phone number must be 9 to 15 digits and may start with +.';
         }
 
         return $this->errors;
     }
 
     /**
-     * Returns the sanitized and filtered input data.
-     * @return array
+     * Return normalized and safe auth data.
+     *
+     * Important:
+     * - Password remains raw (unmodified) for authentication/hashing.
+     * - Output escaping should happen at the view layer, not here.
+     *
+     * @return array{
+     *     first_name: string,
+     *     last_name: string,
+     *     email: string,
+     *     password: string,
+     *     phone_number: string|null
+     * }
      */
     public function sanitized(): array
     {
+        $fullName = trim((string) ($this->data['full_name'] ?? ''));
+        $nameParts = preg_split('/\s+/', $fullName, 2) ?: [];
+
+        $firstName = trim($nameParts[0] ?? '');
+        $lastName = trim($nameParts[1] ?? '-');
+
+        $phone = preg_replace('/[^\d+]/', '', trim((string) ($this->data['phone_number'] ?? '')));
+        $phone = $phone !== '' ? $phone : null;
+
         return [
-            'full_name'    => htmlspecialchars(trim($this->data['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'),
-            'email'        => filter_var(trim($this->data['email'] ?? ''), FILTER_SANITIZE_EMAIL),
-            'password'     => $this->data['password'] ?? '', 
-            'phone_number' => htmlspecialchars(trim($this->data['phone_number'] ?? ''), ENT_QUOTES, 'UTF-8'),
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'email' => strtolower(trim((string) ($this->data['email'] ?? ''))),
+            'password' => (string) ($this->data['password'] ?? ''),
+            'phone_number' => $phone,
         ];
     }
 }

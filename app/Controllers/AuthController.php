@@ -1,180 +1,196 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Services\AuthService;
 use App\Helpers\SecurityHelper;
-use App\Request\AuthRequest;
+use App\Requests\AuthRequest;
+use App\Services\AuthService;
 use Throwable;
 
 /**
- * Class AuthController
- * * Handles user authentication processes including login, registration, and logout.
- * Acts as a mediator between the AuthRequest validation and AuthService logic.
- * * @package App\Controllers
+ * Handles authentication HTTP flow.
  */
 class AuthController extends Controller
 {
-    /**
-     * @var AuthService The service handling core authentication logic.
-     */
     private AuthService $authService;
 
-    /**
-     * AuthController constructor.
-     * Initializes the controller and its dependencies.
-     */
     public function __construct()
     {
-        parent::__construct();
         $this->authService = new AuthService();
     }
 
     /**
-     * Handles the login request.
-     * Displays the login view for GET requests and processes credentials for POST requests.
-     * * @return void
+     * Handle login request.
+     *
+     * @return void
      */
     public function login(): void
     {
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->view('auth/login');
-            return;
-        }
-
-        // Basic sanitization of the POST global
-        $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
-
-        // Validate CSRF Integrity
-        if (!SecurityHelper::validateCsrfToken($data['csrf_token'] ?? '')) {
-            $this->view('auth/login', [
-                'error' => 'Security token expired. Please refresh and try again.',
-                'data'  => $data
-            ]);
-            return;
-        }
-
-        $request = new AuthRequest($data);
-        $errors = $request->validateLogin();
-
-        if (!empty($errors)) {
-            $this->view('auth/login', [
-                'error' => reset($errors),
-                'data'  => $data
-            ]);
-            return;
-        }
-
         try {
-            $sanitized = $request->sanitized();
-            $result = $this->authService->authenticate($sanitized['email'], $sanitized['password']);
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                $this->view('auth/login');
 
-            if (!$result['success']) {
-                if (isset($result['redirect'])) {
-                    $this->redirect($result['redirect']);
-                    return;
-                }
-                $this->view('auth/login', [
-                    'error' => $result['error'],
-                    'data'  => $data
-                ]);
                 return;
             }
 
-            $this->setSession($result['user']);
-            $this->redirect('/dashboard');
+            $data = $this->getInputData();
 
+            if (!$this->validateCsrfOrRender('auth/login', $data)) {
+                return;
+            }
+
+            $request = new AuthRequest($data);
+            $errors = $request->validateLogin();
+
+            if (!empty($errors)) {
+                $this->view('auth/login', [
+                    'errors' => $errors,
+                    'data' => $data,
+                ]);
+
+                return;
+            }
+
+            $result = $this->authService->authenticate(
+                trim((string) ($data['email'] ?? '')),
+                (string) ($data['password'] ?? '')
+            );
+
+            if ($result['success']) {
+                $_SESSION['user'] = $result['user'];
+                $this->redirect('/dashboard');
+
+                return;
+            }
+
+            if (!empty($result['redirect'])) {
+                $this->redirect($result['redirect']);
+
+                return;
+            }
+
+            $this->view('auth/login', [
+                'error' => $result['error'],
+                'data' => $data,
+            ]);
         } catch (Throwable $e) {
-            $this->handleError("Login Error", $e);
+            $this->handleServerError($e, 'AuthController@login');
         }
     }
 
     /**
-     * Handles the registration request.
-     * Displays the registration view for GET requests and processes new user data for POST requests.
-     * * @return void
+     * Handle registration request.
+     *
+     * @return void
      */
     public function register(): void
     {
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            $this->view('auth/register');
-            return;
-        }
-
-        $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
-
-        if (!SecurityHelper::validateCsrfToken($data['csrf_token'] ?? '')) {
-            $this->view('auth/register', [
-                'error' => 'Security token invalid.',
-                'data'  => $data
-            ]);
-            return;
-        }
-
-        $request = new AuthRequest($data);
-        $errors = $request->validateRegister();
-
-        if (!empty($errors)) {
-            $this->view('auth/register', [
-                'error' => reset($errors),
-                'data'  => $data
-            ]);
-            return;
-        }
-
         try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                $this->view('auth/register');
+
+                return;
+            }
+
+            $data = $this->getInputData();
+
+            if (!$this->validateCsrfOrRender('auth/register', $data)) {
+                return;
+            }
+
+            $request = new AuthRequest($data);
+            $errors = $request->validateRegister();
+
+            if (!empty($errors)) {
+                $this->view('auth/register', [
+                    'errors' => $errors,
+                    'data' => $data,
+                ]);
+
+                return;
+            }
+
             $sanitized = $request->sanitized();
-            
-            if ($this->authService->registerUser($sanitized)) {
-                $this->redirect('/verify-otp?email=' . urlencode($sanitized['email']));
+            $registerResult = $this->authService->registerUser($sanitized);
+
+            if ($registerResult['success']) {
+                $this->redirect((string) $registerResult['redirect']);
+
                 return;
             }
 
             $this->view('auth/register', [
-                'error' => 'An error occurred during registration. Please try again.',
-                'data'  => $data
+                'error' => $registerResult['error'],
+                'data' => $data,
             ]);
-
         } catch (Throwable $e) {
-            $this->handleError("Registration Error", $e);
+            $this->handleServerError($e, 'AuthController@register');
         }
     }
 
     /**
-     * Destroys the user session and logs the user out.
-     * * @return void
+     * Get normalized POST input.
+     *
+     * Important:
+     * - Trims string inputs
+     * - Output escaping must happen in the view layer
+     *
+     * @return array<string, mixed>
      */
-    public function destroy(): void
+    private function getInputData(): array
     {
-        session_unset();
-        session_destroy();
-        $this->redirect('/login');
+        $data = [];
+
+        foreach ($_POST as $key => $value) {
+            $data[$key] = is_string($value) ? trim($value) : $value;
+        }
+
+        return $data;
     }
 
     /**
-     * Sets the authenticated user's session data.
-     * * @param array $user Associative array containing user details.
-     * @return void
+     * Validate CSRF token and render error view if invalid.
+     *
+     * @param string $view
+     * @param array<string, mixed> $data
+     * @return bool
      */
-    private function setSession(array $user): void
+    private function validateCsrfOrRender(string $view, array $data): bool
     {
-        session_regenerate_id(true);
-        $_SESSION['user_id'] = (int)$user['id'];
-        $_SESSION['role_id'] = (int)$user['role_id'];
+        if (!SecurityHelper::validateCsrfToken($data['csrf_token'] ?? null)) {
+            $this->view($view, [
+                'error' => 'Security token expired. Please refresh and try again.',
+                'data' => $data,
+            ]);
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
-     * Logs errors and displays a generic server error page.
-     * * @param string $context The context or location where the error occurred.
-     * @param Throwable $e The caught exception or error.
+     * Handle unexpected server errors.
+     *
+     * @param Throwable $e
+     * @param string $context
      * @return void
      */
-    private function handleError(string $context, Throwable $e): void
+    private function handleServerError(Throwable $e, string $context): void
     {
-        error_log("[$context] " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+        error_log(sprintf(
+            '[%s] %s in %s on line %d',
+            $context,
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine()
+        ));
+
         http_response_code(500);
-        require_once __DIR__ . '/../Views/errors/500.php';
-        exit;
+
+        $this->view('errors/500');
     }
 }
