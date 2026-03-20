@@ -6,7 +6,8 @@ use PDO;
 
 /**
  * Class Product
- * Standard database interactions for the products table.
+ * Handles database operations for the products table only.
+ * Responsibility: No business logic, only DB queries.
  */
 class Product extends Model
 {
@@ -29,7 +30,7 @@ class Product extends Model
     }
 
     /**
-     * Find specific product by ID.
+     * Find a product by ID.
      */
     public function findById(int $id): array|false
     {
@@ -42,16 +43,50 @@ class Product extends Model
     }
 
     /**
-     * Update stock level only.
+     * Create new product.
      */
-    public function updateStock(int $id, int $newStock): bool
+    public function create(array $data): string|false
+    {
+        $sql = "INSERT INTO {$this->table}
+                    (product_name, sku, description, category_id, price, stock_quantity, status, low_stock_threshold, image_path, created_by, created_at)
+                VALUES
+                    (:product_name, :sku, :description, :category_id, :price, :stock_quantity, :status, :low_stock_threshold, :image_path, :created_by, NOW())";
+
+        $this->query($sql, $data);
+        return $this->db->lastInsertId();
+    }
+
+    /**
+     * Update existing product by ID.
+     */
+    public function updateById(int $id, array $data): bool
+    {
+        $fields = [];
+        $params = [];
+        foreach ($data as $key => $value) {
+            $fields[] = "$key = :$key";
+            $params[$key] = $value;
+        }
+        $params['id'] = $id;
+
+        $sql = "UPDATE {$this->table} SET " . implode(', ', $fields) . ", updated_at = NOW()
+                WHERE id = :id
+                  AND deleted_at IS NULL";
+
+        return $this->query($sql, $params)->rowCount() > 0;
+    }
+
+    /**
+     * Soft delete product.
+     */
+    public function delete(int $id): bool
     {
         $sql = "UPDATE {$this->table}
-                SET stock_quantity = ?
+                SET deleted_at = NOW()
                 WHERE id = ?
                   AND deleted_at IS NULL";
 
-        return $this->query($sql, [$newStock, $id])->rowCount() > 0;
+        return $this->query($sql, [$id])->rowCount() > 0;
     }
 
     /**
@@ -68,7 +103,7 @@ class Product extends Model
     }
 
     /**
-     * Count low stock active products using configurable threshold.
+     * Count low stock active products.
      */
     public function countLowStockProducts(int $threshold): int
     {
@@ -82,7 +117,7 @@ class Product extends Model
     }
 
     /**
-     * Get current total inventory value for active products.
+     * Get total inventory value for active products.
      */
     public function getTotalInventoryValue(): float
     {
@@ -92,12 +127,11 @@ class Product extends Model
                   AND deleted_at IS NULL";
 
         $result = $this->query($sql)->fetch(PDO::FETCH_ASSOC);
-
         return (float) ($result['total_value'] ?? 0);
     }
 
     /**
-     * Get active product count per active category.
+     * Get product distribution per active category.
      */
     public function getCategoryDistribution(): array
     {
@@ -130,33 +164,5 @@ class Product extends Model
                 LIMIT {$limit}";
 
         return $this->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Soft delete product.
-     */
-    public function delete(int $id): bool
-    {
-        $sql = "UPDATE {$this->table}
-                SET deleted_at = NOW()
-                WHERE id = ?
-                  AND deleted_at IS NULL";
-
-        return $this->query($sql, [$id])->rowCount() > 0;
-    }
-
-    /**
-     * Create new product record.
-     */
-    public function create(array $data): string|false
-    {
-        $sql = "INSERT INTO {$this->table}
-                    (product_name, category_id, price, stock_quantity, status, created_at)
-                VALUES
-                    (:product_name, :category_id, :price, :stock_quantity, :status, NOW())";
-
-        $this->query($sql, $data);
-
-        return $this->db->lastInsertId();
     }
 }
