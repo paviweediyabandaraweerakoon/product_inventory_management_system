@@ -1,29 +1,82 @@
 <?php
 namespace App\Core;
 
+use App\Core\Env;
+use Throwable;
+
+/**
+ * Class Controller
+ * Base controller that provides common functionality such as:
+ * - session initialization
+ * - view rendering
+ * - URL redirection
+ * - standardized error logging
+ */
 class Controller
 {
-    public function view($view, $data = [])
+    /**
+     * Initialize common controller dependencies.
+     */
+    public function __construct()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+
+    /**
+     * Render a view file and extract data for use in the template.
+     *
+     * @param string $view Path to the view file (e.g., 'categories/index')
+     * @param array  $data Data to be passed to the view
+     */
+    protected function view(string $view, array $data = []): void
     {
         extract($data);
-        
-        $viewFile = __DIR__ . "/../Views/{$view}.php";
-        
-        if (file_exists($viewFile)) {
-            // View එකේ content එක විතරක් variable එකකට ගන්නවා
-            ob_start();
-            require $viewFile; // require_once වෙනුවට require පාවිච්චි කරන්න
-            $content = ob_get_clean();
-            
-            // Layout එක load කරනවා. Layout එක ඇතුළේ $content variable එක print වෙනවා.
-            $layoutFile = __DIR__ . "/../Views/layout.php";
-            if (file_exists($layoutFile)) {
-                require $layoutFile;
-            } else {
-                echo $content;
-            }
-        } else {
-            die("Error: View file [{$view}] not found in: " . $viewFile);
+
+        $file = __DIR__ . '/../Views/' . $view . '.php';
+
+        if (file_exists($file)) {
+            require_once $file;
+            return;
         }
+
+        $this->logError(static::class . ' View', new \RuntimeException(
+            "View file [{$view}] not found at: {$file}"
+        ));
+
+        http_response_code(500);
+        die('Error: View file not found.');
+    }
+
+    /**
+     * Redirect to a path using APP_URL from .env.
+     *
+     * @param string $path Relative application path
+     */
+    protected function redirect(string $path): void
+    {
+        $baseUrl = rtrim((string) Env::get('APP_URL', ''), '/');
+        header('Location: ' . $baseUrl . '/' . ltrim($path, '/'));
+        exit;
+    }
+
+    /**
+     * Standardized application error logging for controllers.
+     *
+     * @param string    $action Action or context name
+     * @param Throwable $e      Exception or throwable instance
+     */
+    protected function logError(string $action, Throwable $e): void
+    {
+        error_log(sprintf(
+            '[%s] %s %s Error: %s in %s on line %d',
+            date('Y-m-d H:i:s'),
+            static::class,
+            $action,
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine()
+        ));
     }
 }

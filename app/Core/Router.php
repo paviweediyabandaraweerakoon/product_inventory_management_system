@@ -2,75 +2,123 @@
 
 namespace App\Core;
 
-class Router {
-    protected $routes = [];
+use Exception;
 
-    public function get($path, $handler) {
-        $this->routes['GET'][$this->convertToRegex($path)] = $handler;
+/**
+ * Class Router
+ * Responsible for handling HTTP request routing, method spoofing, 
+ * and dynamic controller resolution.
+ */
+class Router
+{
+    /** @var array Holds the registered routes categorized by HTTP method */
+    protected array $routes = [];
+
+    /**
+     * Register a GET route.
+     */
+    public function get(string $path, array $handler): void 
+    { 
+        $this->routes['GET'][$this->convertToRegex($path)] = $handler; 
     }
 
-    public function post($path, $handler) {
-        $this->routes['POST'][$this->convertToRegex($path)] = $handler;
+    /**
+     * Register a POST route.
+     */
+    public function post(string $path, array $handler): void 
+    { 
+        $this->routes['POST'][$this->convertToRegex($path)] = $handler; 
     }
 
-    private function convertToRegex($path) {
-        // {id} වගේ ඒවා regex එකට හරවනවා
-        return "@^" . preg_replace('/\{([a-zA-r0-9_]+)\}/', '(?P<\1>[a-zA-Z0-9_]+)', $path) . "$@";
+    /**
+     * Register a DELETE route (Supports method spoofing).
+     */
+    public function delete(string $path, array $handler): void 
+    { 
+        $this->routes['DELETE'][$this->convertToRegex($path)] = $handler; 
     }
 
-    public function resolve() {
+    /**
+     * Convert URI path to a Regular Expression for dynamic matching.
+     */
+    private function convertToRegex(string $path): string
+    {
+        $path = trim($path, '/');
+        if ($path === "") return "#^/$#";
+        
+        // Convert {id} or {slug} placeholders to named regex groups
+        $regex = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[a-zA-Z0-9_]+)', $path);
+        return "#^/" . $regex . "/?$#";
+    }
+
+    /**
+     * Resolve the incoming request and dispatch to the appropriate controller.
+     * * @throws Exception If controller or method is missing.
+     */
+    public function resolve(): void
+    {
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
         $method = $_SERVER['REQUEST_METHOD'];
-        
-        // URL එකේ Query parameters (?id=1) අයින් කරනවා
-        $path = explode('?', $uri)[0];
 
-        // XAMPP වල subfolders වලදී එන base path එක අයින් කරන කෑල්ල
-        $scriptName = $_SERVER['SCRIPT_NAME'];
-        $basePath = str_replace('/index.php', '', $scriptName);
+        // --- RESTful Method Spoofing ---
+        // Allows HTML forms to perform DELETE/PUT requests via a hidden '_method' field.
+        if ($method === 'POST' && isset($_POST['_method'])) {
+            $method = strtoupper($_POST['_method']);
+        }
+
+        $path = parse_url($uri, PHP_URL_PATH);
         
-        if ($basePath !== '' && strpos($path, $basePath) === 0) {
+        // Handle subdirectory deployments by removing the base path from the request URI
+        $scriptName = $_SERVER['SCRIPT_NAME']; 
+        $basePath = str_replace('index.php', '', $scriptName);
+        
+        if (strpos($path, $basePath) === 0) {
             $path = substr($path, strlen($basePath));
         }
+        $path = '/' . trim($path, '/');
 
-        // path එක හිස් වුණොත් ඒක root එක "/" කරනවා
-        if (empty($path)) {
-            $path = '/';
+        // Check if the requested HTTP method is registered
+        if (!isset($this->routes[$method])) {
+            $this->abort404($path);
         }
 
-        // Routes පීරලා බලනවා (Loop)
         foreach ($this->routes[$method] as $route => $handler) {
             if (preg_match($route, $path, $matches)) {
-                // Named parameters ටික විතරක් පෙරලා ගන්නවා
+                // Extract only the named parameters from the regex matches
                 $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
+                [$controllerClass, $methodName] = $handler;
+
+                // --- High-Level Validation ---
+                if (!class_exists($controllerClass)) {
+                    throw new Exception("Router Error: Controller class '$controllerClass' not found.");
+                }
                 
-                if (is_array($handler)) {
-                    $className = $handler[0];
-                    $methodName = $handler[1];
-
-                    if (class_exists($className)) {
-                        $controller = new $className();
-                        
-                        if (method_exists($controller, $methodName)) {
-                            // මෙන්න මෙතනදී තමයි Controller එකේ method එකට params ටික යවන්නේ
-                            return call_user_func_array([$controller, $methodName], $params);
-                        }
-                        
-                        die("Error: Method '$methodName' not found in class '$className'");
-                    }
-                    
-                    die("Error: Controller class '$className' not found. Make sure namespaces are correct and 'composer dump-autoload' is run.");
+                $controller = new $controllerClass();
+                
+                if (!method_exists($controller, $methodName)) {
+                    throw new Exception("Router Error: Method '$methodName' does not exist in $controllerClass.");
                 }
 
-                // Handler එක simple function එකක් (Closure) වුණොත්
-                if (is_callable($handler)) {
-                    return call_user_func_array($handler, $params);
-                }
+                /**
+                 * Dispatch the request.
+                 * array_values($params) ensures only the data is passed to the method arguments.
+                 */
+                call_user_func_array([$controller, $methodName], array_values($params));
+                return;
             }
         }
 
-        // මොන රූට් එකක්වත් මැච් වුණේ නැත්නම් 404
+        $this->abort404($path);
+    }
+
+    /**
+     * Terminate the request with a 404 response.
+     */
+    private function abort404(string $path): void
+    {
         http_response_code(404);
-        echo "404 - Page Not Found (Router could not find match for: " . htmlspecialchars($path) . ")";
+        // Production style: avoid dumping full debug info here for security.
+        echo "<h1>404 - Page Not Found</h1>";
+        exit;
     }
 }

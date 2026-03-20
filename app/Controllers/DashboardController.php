@@ -2,66 +2,115 @@
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Models\Product;
+use App\Core\Env;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
+use App\Models\Product;
+use Throwable;
 
+/**
+ * Class DashboardController
+ * Handles real-time inventory analytics, sales performance monitoring,
+ * and operational health insights for the administration dashboard.
+ */
 class DashboardController extends Controller
 {
-    public function index()
+    private Product $productModel;
+    private Category $categoryModel;
+    private InventoryTransaction $transactionModel;
+
+    public function __construct()
     {
-        $productModel = new Product();
-        $categoryModel = new Category();
+        parent::__construct();
+        $this->productModel = new Product();
+        $this->categoryModel = new Category();
+        $this->transactionModel = new InventoryTransaction();
+    }
 
-        // 1. Live Category Distribution (Doughnut Chart එකට)
-        // Stationery සහ Home Appliances වලට අදාළව නිෂ්පාදන ගණන ලබා ගනී
-        $catSql = "SELECT c.category_name as name, COUNT(p.id) as count 
-                   FROM categories c 
-                   LEFT JOIN products p ON c.id = p.category_id 
-                   WHERE c.status = 'active' AND c.deleted_at IS NULL 
-                   GROUP BY c.id";
+    /**
+     * Display the main dashboard with live metrics and recent operational data.
+     */
+    public function index(): void
+    {
+        try {
+            // Configurable reporting values from .env
+            $reportMonths = max(1, (int) Env::get('DASHBOARD_REPORT_MONTHS', 6));
+            $lowStockThreshold = (int) Env::get('LOW_STOCK_THRESHOLD', 5);
 
-        $chartResults = $productModel->query($catSql)->fetchAll(\PDO::FETCH_ASSOC);
-        $chartLabels = array_column($chartResults, 'name');
-        $chartData   = array_column($chartResults, 'count');
+            // 1. Category distribution (active products per active category)
+            $chartResults = $this->productModel->getCategoryDistribution();
+            $chartLabels = array_column($chartResults, 'name');
+            $chartData   = array_map('intval', array_column($chartResults, 'count'));
 
-        // 2. Live Sales Performance (Line Chart එකට - පසුගිය මාස 6ක දත්ත)
-        // transaction_type = 'OUT' (විකුණුම්) වල එකතුව ගණනය කරයි
-        $salesSql = "SELECT DATE_FORMAT(created_at, '%b') as month, SUM(quantity * unit_price) as total 
-                     FROM inventory_transactions 
-                     WHERE transaction_type = 'OUT' AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-                     GROUP BY MONTH(created_at) 
-                     ORDER BY created_at ASC";
+            // 2. Sales performance (current month backwards, zero-filled)
+            $salesResults = $this->transactionModel->getMonthlySalesTotals($reportMonths);
+            [$salesLabels, $salesData] = $this->buildSalesSeries($salesResults, $reportMonths);
 
-        $salesResults = $productModel->query($salesSql)->fetchAll(\PDO::FETCH_ASSOC);
-        
-        // දත්ත නැතිනම් Default මාස සහ 0 අගයන් පෙන්වීමට සකසයි
-        $salesLabels = array_column($salesResults, 'month') ?: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-        $salesData   = array_column($salesResults, 'total') ?: [0, 0, 0, 0, 0, 0];
+            // 3. Summary metrics
+            $lowStockCount = $this->productModel->countLowStockProducts($lowStockThreshold);
+            $totalValue = $this->productModel->getTotalInventoryValue();
 
-        // 3. Low Stock Calculation (Alert Card එකට)
-        // තොගය 5ට වඩා අඩු නිෂ්පාදන ගණන බලයි
-        $lowStockSql = "SELECT COUNT(*) as total FROM products WHERE stock_quantity <= 5 AND deleted_at IS NULL";
-        $lowStockResult = $productModel->query($lowStockSql)->fetch(\PDO::FETCH_ASSOC);
+            // 4. Recent live activity + recent products
+            $recentActivity = $this->transactionModel->getRecentActivity(10);
+            $recentProducts = $this->productModel->getRecentProducts(5);
 
-        // 4. Inventory Total Value (Total Value Card එකට)
-        // මුළු ඉන්වෙන්ටරියේ වටිනාකම (Price * Stock) එකතු කරයි
-        $valueSql = "SELECT SUM(price * stock_quantity) as total_value FROM products WHERE deleted_at IS NULL";
-        $valueResult = $productModel->query($valueSql)->fetch(\PDO::FETCH_ASSOC);
-        
-        // දත්ත array එක සකස් කර View එකට යවයි
-        $data = [
-            'totalProducts'    => $productModel->countActiveRecords(), 
-            'lowStockCount'    => (int)($lowStockResult['total'] ?? 0), 
-            'inventoryValue'   => (float)($valueResult['total_value'] ?? 0),
-            'activeCategories' => $categoryModel->countActiveRecords(), 
-            'recentProducts'   => $productModel->getAll(5), // අලුත්ම නිෂ්පාදන 5ක් පෙන්වීමට
-            'chartLabels'      => $chartLabels,
-            'chartData'        => $chartData,
-            'salesLabels'      => $salesLabels,
-            'salesData'        => $salesData
-        ];
+            $data = [
+                'totalProducts'      => $this->productModel->countActiveRecords(),
+                'lowStockCount'      => $lowStockCount,
+                'inventoryValue'     => number_format($totalValue, 2),
+                'activeCategories'   => $this->categoryModel->countActiveRecords(),
+                'recentProducts'     => $recentProducts,
+                'recentActivity'     => $recentActivity,
+                'chartLabels'        => $chartLabels,
+                'chartData'          => $chartData,
+                'salesLabels'        => $salesLabels,
+                'salesData'          => $salesData,
+                'reportMonths'       => $reportMonths,
+                'lowStockThreshold'  => $lowStockThreshold,
+            ];
 
-        return $this->view('dashboard/index', $data);
+            $this->view('dashboard/index', $data);
+
+        } catch (Throwable $e) {
+            $this->logError('Index', $e);
+            http_response_code(500);
+            $this->view('errors/500');
+            exit;
+        }
+    }
+
+    /**
+     * Build month labels from the current month backwards and fill missing months with zero.
+     *
+     * @param array $salesResults
+     * @param int   $reportMonths
+     * @return array{0: array, 1: array}
+     */
+    private function buildSalesSeries(array $salesResults, int $reportMonths): array
+    {
+        $salesMap = [];
+
+        foreach ($salesResults as $row) {
+            $monthKey = $row['month_key'] ?? null;
+
+            if ($monthKey !== null) {
+                $salesMap[$monthKey] = (float) ($row['total'] ?? 0);
+            }
+        }
+
+        $labels = [];
+        $data = [];
+
+        // Oldest -> current month
+        for ($i = $reportMonths - 1; $i >= 0; $i--) {
+            $date = new \DateTime('first day of this month');
+            $date->modify("-{$i} month");
+
+            $monthKey = $date->format('Y-m');
+            $labels[] = $date->format('M Y');
+            $data[] = $salesMap[$monthKey] ?? 0.0;
+        }
+
+        return [$labels, $data];
     }
 }

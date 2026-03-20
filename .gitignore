@@ -1,11 +1,28 @@
+# Dependency Directories
+/vendor/
+/node_modules/
+
+# Environment Files
+.env
+
 # Logs
 storage/logs/
+*.log
 
-# Uploads
+# Uploads & Temp Files
 storage/uploads/
+/public/uploads/
+.temp/
+.tmp/
 
-# Vendor
-/vendor/
+# Package Lock Files
+package-lock.json
+composer.lock
 
-# Environment
-.env
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# IDE Specific Files (VS Code / PHPStorm)
+.vscode/
+.idea/
