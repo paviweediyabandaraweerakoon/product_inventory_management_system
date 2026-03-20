@@ -1,5 +1,6 @@
-<?php include __DIR__ . '/../layouts/header.php'; ?>
-
+<?php
+ob_start();
+?>
 <div class="space-y-6">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -208,4 +209,7 @@
     });
 </script>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php
+$content = ob_get_clean();
+include __DIR__ . '/../layouts/main.php';
+?>

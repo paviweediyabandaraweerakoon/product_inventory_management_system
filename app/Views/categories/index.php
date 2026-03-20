@@ -1,4 +1,4 @@
-<?php include __DIR__ . '/../layouts/header.php'; ?>
+<?php ob_start(); ?>
 <div class="space-y-8 animate-fade-in">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white/50 p-6 rounded-2xl backdrop-blur-sm border border-white/20 shadow-sm">
         <div>
@@ -57,4 +57,7 @@
         <?php endforeach; ?>
     </div>
 </div>
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php
+$content = ob_get_clean();
+include __DIR__ . '/../layouts/main.php';
+?>
