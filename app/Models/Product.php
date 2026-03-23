@@ -6,282 +6,81 @@ use App\Core\Model;
 use PDO;
 
 /**
+ * @param string $table The database table associated with this model.
  * Class Product
- *
- * Responsibility:
- * Handle database operations for the products table only.
+ * Standard database interactions for the products table.
  */
 class Product extends Model
 {
-    /**
-     * Table name.
-     */
     protected string $table = 'products';
 
     /**
-     * Get paginated non-deleted products with category info and optional search.
-     *
-     * @param string $search Search keyword
-     * @param int    $limit  Records per page
-     * @param int    $offset Offset
-     *
-     * @return array<int,array<string,mixed>>
-     */
-    public function getPaginated(string $search = '', int $limit = 10, int $offset = 0): array
-    {
-        $sql = "SELECT
-                    p.id,
-                    p.product_name,
-                    p.sku,
-                    p.description,
-                    p.status,
-                    p.category_id,
-                    p.price,
-                    p.stock_quantity,
-                    p.low_stock_threshold,
-                    p.image_path,
-                    p.created_by,
-                    p.created_at,
-                    p.updated_at,
-                    c.category_name
-                FROM {$this->table} p
-                LEFT JOIN categories c
-                    ON p.category_id = c.id
-                   AND c.deleted_at IS NULL
-                WHERE p.deleted_at IS NULL";
-
-        $params = [];
-
-        if ($search !== '') {
-            $sql .= " AND (p.product_name LIKE :search OR p.sku LIKE :search)";
-            $params['search'] = '%' . $search . '%';
-        }
-
-        $sql .= " ORDER BY p.created_at DESC, p.id DESC
-                  LIMIT :limit OFFSET :offset";
-
-        $stmt = $this->db->prepare($sql);
-
-        foreach ($params as $key => $value) {
-            $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
-        }
-
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-
-        $stmt->execute();
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * Count non-deleted products with optional search.
-     *
-     * @param string $search Search keyword
-     *
-     * @return int
-     */
-    public function countFiltered(string $search = ''): int
-    {
-        $sql = "SELECT COUNT(*)
-                FROM {$this->table}
-                WHERE deleted_at IS NULL";
-
-        $params = [];
-
-        if ($search !== '') {
-            $sql .= " AND (product_name LIKE :search OR sku LIKE :search)";
-            $params['search'] = '%' . $search . '%';
-        }
-
-        $stmt = $this->db->prepare($sql);
-
-        foreach ($params as $key => $value) {
-            $stmt->bindValue(':' . $key, $value, PDO::PARAM_STR);
-        }
-
-        $stmt->execute();
-
-        return (int) $stmt->fetchColumn();
-    }
-
-    /**
      * Get all non-deleted products with category info.
-     *
-     * @return array<int,array<string,mixed>>
      */
     public function all(): array
     {
-        return $this->getPaginated('', 100000, 0);
-    }
-
-    /**
-     * Find product by ID with category name.
-     *
-     * @param int $id Product ID
-     *
-     * @return array<string,mixed>|false
-     */
-    public function findById(int $id): array|false
-    {
-        $sql = "SELECT
-                    p.id,
-                    p.product_name,
-                    p.sku,
-                    p.description,
-                    p.status,
-                    p.category_id,
-                    p.price,
-                    p.stock_quantity,
-                    p.low_stock_threshold,
-                    p.image_path,
-                    p.created_by,
-                    p.created_at,
-                    p.updated_at,
-                    c.category_name
+        $sql = "SELECT p.*, c.category_name
                 FROM {$this->table} p
                 LEFT JOIN categories c
                     ON p.category_id = c.id
                    AND c.deleted_at IS NULL
-                WHERE p.id = :id
-                  AND p.deleted_at IS NULL
-                LIMIT 1";
+                WHERE p.deleted_at IS NULL
+                ORDER BY p.created_at DESC, p.id DESC";
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        return $this->query($sql)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**
-     * Create new product.
-     *
-     * @param array<string,mixed> $data Insert data
-     *
-     * @return string|false
+     * Find specific product by ID.
      */
-    public function create(array $data): string|false
+    public function findById(int $id): array|false
     {
-        $sql = "INSERT INTO {$this->table}
-                    (
-                        product_name,
-                        sku,
-                        description,
-                        status,
-                        category_id,
-                        price,
-                        stock_quantity,
-                        low_stock_threshold,
-                        image_path,
-                        created_by,
-                        created_at
-                    )
-                VALUES
-                    (
-                        :product_name,
-                        :sku,
-                        :description,
-                        :status,
-                        :category_id,
-                        :price,
-                        :stock_quantity,
-                        :low_stock_threshold,
-                        :image_path,
-                        :created_by,
-                        NOW()
-                    )";
-
-        $this->query($sql, $data);
-
-        return $this->db->lastInsertId();
-    }
-
-    /**
-     * Update existing product by ID.
-     *
-     * @param int                 $id   Product ID
-     * @param array<string,mixed> $data Update data
-     *
-     * @return bool
-     */
-    public function updateById(int $id, array $data): bool
-    {
-        $fields = [];
-        $params = [];
-
-        foreach ($data as $key => $value) {
-            $fields[] = "{$key} = :{$key}";
-            $params[$key] = $value;
-        }
-
-        $params['id'] = $id;
-
-        $sql = "UPDATE {$this->table}
-                SET " . implode(', ', $fields) . ", updated_at = NOW()
-                WHERE id = :id
-                  AND deleted_at IS NULL";
-
-        return $this->query($sql, $params)->rowCount() > 0;
-    }
-
-    /**
-     * Soft delete product by ID.
-     *
-     * @param int $id Product ID
-     *
-     * @return bool
-     */
-    public function delete(int $id): bool
-    {
-        $sql = "UPDATE {$this->table}
-                SET deleted_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = :id
-                  AND deleted_at IS NULL";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return $stmt->rowCount() > 0;
-    }
-
-    /**
-     * Check whether a SKU already exists.
-     *
-     * @param string   $sku       SKU value
-     * @param int|null $excludeId Exclude current product ID for update
-     *
-     * @return bool
-     */
-    public function skuExists(string $sku, ?int $excludeId = null): bool
-    {
-        $sql = "SELECT COUNT(*)
+        $sql = "SELECT *
                 FROM {$this->table}
-                WHERE sku = :sku
+                WHERE id = ?
                   AND deleted_at IS NULL";
 
-        if ($excludeId !== null) {
-            $sql .= " AND id != :exclude_id";
-        }
+        return $this->query($sql, [$id])->fetch(PDO::FETCH_ASSOC);
+    }
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->bindValue(':sku', $sku, PDO::PARAM_STR);
+    /**
+     * Update stock level only.
+     */
+    public function updateStock(int $id, int $newStock): bool
+    {
+        $sql = "UPDATE {$this->table}
+                SET stock_quantity = ?
+                WHERE id = ?
+                  AND deleted_at IS NULL";
 
-        if ($excludeId !== null) {
-            $stmt->bindValue(':exclude_id', $excludeId, PDO::PARAM_INT);
-        }
+        return $this->query($sql, [$newStock, $id])->rowCount() > 0;
+    }
 
-        $stmt->execute();
+    /**
+     * Update an existing product record, including status and other details.
+     */
+    public function updateProduct(int $id, array $data): bool
+    {
+        $sql = "UPDATE {$this->table}
+                SET product_name = :product_name,
+                    sku = :sku,
+                    description = :description,
+                    category_id = :category_id,
+                    price = :price,
+                    stock_quantity = :stock_quantity,
+                    low_stock_threshold = :low_stock_threshold,
+                    status = :status,
+                    updated_at = NOW()
+                WHERE id = :id AND deleted_at IS NULL";
 
-        return (int) $stmt->fetchColumn() > 0;
+        // Bind the product ID for the WHERE clause
+        $data['id'] = $id;
+
+        return $this->query($sql, $data)->rowCount() > 0;
     }
 
     /**
      * Count active (non-deleted) products.
-     *
-     * @return int
      */
     public function countActiveRecords(): int
     {
@@ -294,31 +93,21 @@ class Product extends Model
     }
 
     /**
-     * Count low stock active products.
-     *
-     * @param int $threshold Threshold
-     *
-     * @return int
+     * Count low stock active products using configurable threshold.
      */
     public function countLowStockProducts(int $threshold): int
     {
         $sql = "SELECT COUNT(*)
                 FROM {$this->table}
-                WHERE stock_quantity <= :threshold
+                WHERE stock_quantity <= ?
                   AND status = 'active'
                   AND deleted_at IS NULL";
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->bindValue(':threshold', $threshold, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return (int) $stmt->fetchColumn();
+        return (int) $this->query($sql, [$threshold])->fetchColumn();
     }
 
     /**
-     * Get total inventory value for active products.
-     *
-     * @return float
+     * Get current total inventory value for active products.
      */
     public function getTotalInventoryValue(): float
     {
@@ -333,15 +122,11 @@ class Product extends Model
     }
 
     /**
-     * Get product distribution per active category.
-     *
-     * @return array<int,array<string,mixed>>
+     * Get active product count per active category.
      */
     public function getCategoryDistribution(): array
     {
-        $sql = "SELECT
-                    c.category_name AS name,
-                    COUNT(p.id) AS count
+        $sql = "SELECT c.category_name AS name, COUNT(p.id) AS count
                 FROM categories c
                 LEFT JOIN {$this->table} p
                     ON c.id = p.category_id
@@ -357,22 +142,12 @@ class Product extends Model
 
     /**
      * Get latest active products.
-     *
-     * @param int $limit Number of records
-     *
-     * @return array<int,array<string,mixed>>
      */
     public function getRecentProducts(int $limit = 5): array
     {
         $limit = max(1, (int) $limit);
 
-        $sql = "SELECT
-                    id,
-                    product_name,
-                    sku,
-                    stock_quantity,
-                    price,
-                    created_at
+        $sql = "SELECT *
                 FROM {$this->table}
                 WHERE deleted_at IS NULL
                   AND status = 'active'
@@ -380,5 +155,35 @@ class Product extends Model
                 LIMIT {$limit}";
 
         return $this->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Soft delete product.
+     */
+    public function delete(int $id): bool
+    {
+        $sql = "UPDATE {$this->table}
+                SET deleted_at = NOW()
+                WHERE id = ?
+                  AND deleted_at IS NULL";
+
+        return $this->query($sql, [$id])->rowCount() > 0;
+    }
+
+    /**
+     * Create new product record.
+     */
+    public function create(array $data): string|false
+    {
+        $sql = "INSERT INTO {$this->table}
+                    (product_name, sku, description, category_id, price, stock_quantity, 
+                     low_stock_threshold, status, image_path, created_by, created_at)
+                VALUES
+                    (:product_name, :sku, :description, :category_id, :price, :stock_quantity, 
+                     :low_stock_threshold, :status, :image_path, :created_by, NOW())";
+
+        $this->query($sql, $data);
+
+        return $this->db->lastInsertId();
     }
 }

@@ -50,6 +50,16 @@ class Controller
     }
 
     /**
+     * Reusable helper for sanitizing POST data
+     */
+    protected function getPostData(): array
+    {
+        return array_map(function($value) {
+            return is_string($value) ? htmlspecialchars(trim($value)) : $value;
+        }, $_POST);
+    }
+
+    /**
      * Redirect to a path using APP_URL from .env.
      *
      * @param string $path Relative application path

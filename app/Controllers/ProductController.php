@@ -1,30 +1,21 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Controllers;
 
 use App\Core\Controller;
-use App\Helpers\FileUploadHelper;
 use App\Models\Category;
 use App\Models\Product;
 use App\Requests\ProductRequest;
+use App\Services\ProductService;
 use Throwable;
 
 /**
  * Class ProductController
- *
- * Responsibility:
- * Acts as a traffic cop between HTTP requests and the application's models.
- * Handles request coordination, validation flow, model interaction,
- * and final view/redirect responses for product operations.
- *
- * This controller should not contain direct SQL queries or heavy business rules.
+ * Manages product lifecycle operations including listing, creation,
+ * validation, and soft-delete handling.
  */
 class ProductController extends Controller
 {
-    private const PER_PAGE = 10;
-
     private Product $productModel;
     private Category $categoryModel;
 
@@ -36,57 +27,48 @@ class ProductController extends Controller
     }
 
     /**
-     * Display paginated product list.
+     * Display all active products.
      */
     public function index(): void
     {
         try {
-            $search = trim((string) ($_GET['search'] ?? ''));
-            $page = max(1, (int) ($_GET['page'] ?? 1));
-            $limit = self::PER_PAGE;
-            $offset = ($page - 1) * $limit;
-
-            $products = $this->productModel->getPaginated($search, $limit, $offset);
-            $totalProducts = $this->productModel->countFiltered($search);
-            $totalPages = max(1, (int) ceil($totalProducts / $limit));
+            $products = $this->productModel->all();
 
             $this->view('products/index', [
-                'products'      => $products,
-                'search'        => $search,
-                'currentPage'   => $page,
-                'perPage'       => $limit,
-                'totalProducts' => $totalProducts,
-                'totalPages'    => $totalPages,
-                'title'         => 'Product Inventory',
+                'products' => $products,
+                'title'    => 'Product List',
             ]);
+
         } catch (Throwable $e) {
-            $this->logError('ProductController@index', $e);
+            $this->logError('Index', $e);
             http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
+            $this->view('errors/500');
+            exit;
         }
     }
 
     /**
-     * Show create product form.
+     * Show product creation form with available categories.
      */
     public function create(): void
     {
         try {
+            $categories = $this->categoryModel->all();
+
             $this->view('products/create', [
-                'categories' => $this->categoryModel->all() ?: [],
-                'old'        => [],
-                'errors'     => [],
-                'title'      => 'Add New Product',
+                'categories' => $categories,
             ]);
+
         } catch (Throwable $e) {
-            $this->logError('ProductController@create', $e);
+            $this->logError('Create View', $e);
             http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
+            $this->view('errors/500');
+            exit;
         }
     }
 
     /**
-     * Store new product.
+     * Store a newly created product after validation.
      */
     public function store(): void
     {
@@ -96,109 +78,46 @@ class ProductController extends Controller
                 return;
             }
 
-            if (!isset($_SESSION['user_id'])) {
-                $this->redirect('/login');
-                return;
-            }
-
-            $data = [];
-            foreach ($_POST as $key => $value) {
-                $data[$key] = trim((string) $value);
-            }
+            $data = array_map(
+                fn ($value) => is_scalar($value) ? trim((string) $value) : '',
+                $_POST
+            );
 
             $request = new ProductRequest($data);
 
             if (!$request->validate()) {
                 $this->view('products/create', [
                     'errors'     => $request->getErrors(),
-                    'categories' => $this->categoryModel->all() ?: [],
+                    'categories' => $this->categoryModel->all(),
                     'old'        => $data,
-                    'title'      => 'Add New Product',
                 ]);
                 return;
             }
 
-            $skuInput = trim((string) ($data['sku'] ?? ''));
-            $sku = $skuInput !== ''
-                ? strtoupper($skuInput)
-                : 'SKU-' . strtoupper(bin2hex(random_bytes(4)));
-
-            if ($this->productModel->skuExists($sku)) {
-                $this->view('products/create', [
-                    'errors'     => ['sku' => 'SKU already exists. Please use a unique SKU.'],
-                    'categories' => $this->categoryModel->all() ?: [],
-                    'old'        => $data,
-                    'title'      => 'Add New Product',
-                ]);
-                return;
+            $productService = new ProductService();
+            if ($productService->createProduct($data, $_FILES['image'] ?? [])) {
+                $this->redirect('/products?success=created');
+            } else {
+                throw new \Exception("Could not create product.");
             }
 
-            $uploadResult = FileUploadHelper::uploadProductImage($_FILES['image'] ?? []);
-
-            if (!$uploadResult['success']) {
-                $this->view('products/create', [
-                    'errors'     => ['image' => $uploadResult['error'] ?? 'Image upload failed.'],
-                    'categories' => $this->categoryModel->all() ?: [],
-                    'old'        => $data,
-                    'title'      => 'Add New Product',
-                ]);
-                return;
-            }
-
-            $this->productModel->create([
-                'product_name'        => $data['product_name'],
-                'sku'                 => $sku,
-                'description'         => $data['description'] ?? null,
-                'status'              => $data['status'] ?? 'active',
-                'category_id'         => (int) $data['category_id'],
-                'price'               => (float) $data['price'],
-                'stock_quantity'      => (int) $data['stock_quantity'],
-                'low_stock_threshold' => (int) $data['low_stock_threshold'],
-                'image_path'          => $uploadResult['path'] ?? null,
-                'created_by'          => (int) $_SESSION['user_id'],
-            ]);
-
-            $this->redirect('/products?success=created');
-            return;
         } catch (Throwable $e) {
-            $this->logError('ProductController@store', $e);
+            $this->logError('Store', $e);
             http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
+            $this->view('errors/500');
+            exit;
         }
     }
 
     /**
-     * Show product details.
-     */
-    public function show(string $id): void
-    {
-        try {
-            $product = $this->productModel->findById((int) $id);
-
-            if (!$product) {
-                $this->redirect('/products?error=not_found');
-                return;
-            }
-
-            $this->view('products/show', [
-                'product' => $product,
-                'title'   => 'Product Details',
-            ]);
-        } catch (Throwable $e) {
-            $this->logError('ProductController@show', $e);
-            http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
-        }
-    }
-
-    /**
-     * Show edit form.
+     * Show the form for editing the specified product.
+     *
+     * @param string $id
      */
     public function edit(string $id): void
     {
         try {
             $product = $this->productModel->findById((int) $id);
-
             if (!$product) {
                 $this->redirect('/products?error=not_found');
                 return;
@@ -206,19 +125,21 @@ class ProductController extends Controller
 
             $this->view('products/edit', [
                 'product'    => $product,
-                'categories' => $this->categoryModel->all() ?: [],
-                'errors'     => [],
+                'categories' => $this->categoryModel->all(),
                 'title'      => 'Edit Product',
             ]);
         } catch (Throwable $e) {
-            $this->logError('ProductController@edit', $e);
-            http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
+            $this->logError('Edit View', $e);
+            $this->view('errors/500');
         }
     }
 
     /**
-     * Update product.
+     * Update the specified product in storage.
+     * * @param string $id
+     */
+    /**
+     * Update the specified product in storage.
      */
     public function update(string $id): void
     {
@@ -228,113 +149,67 @@ class ProductController extends Controller
                 return;
             }
 
-            $productId = (int) $id;
-            $existingProduct = $this->productModel->findById($productId);
-
-            if (!$existingProduct) {
-                $this->redirect('/products?error=not_found');
-                return;
-            }
-
-            $data = [];
-            foreach ($_POST as $key => $value) {
-                $data[$key] = trim((string) $value);
-            }
+            // Sanitization via array_map to ensure all inputs are trimmed and safe for validation
+            $data = array_map(
+                fn ($value) => is_scalar($value) ? trim((string) $value) : '',
+                $_POST
+            );
 
             $request = new ProductRequest($data);
 
+            // Validate in update mode (pass true)
             if (!$request->validate(true)) {
                 $this->view('products/edit', [
                     'errors'     => $request->getErrors(),
-                    'product'    => array_merge($existingProduct, $data),
-                    'categories' => $this->categoryModel->all() ?: [],
-                    'title'      => 'Edit Product',
+                    'categories' => $this->categoryModel->all(),
+                    // Pass current ID with the input data to retain state on error
+                    'product'    => array_merge(['id' => $id], $data),
                 ]);
                 return;
             }
 
-            $skuInput = trim((string) ($data['sku'] ?? $existingProduct['sku']));
-            $sku = strtoupper($skuInput);
-
-            if ($this->productModel->skuExists($sku, $productId)) {
-                $this->view('products/edit', [
-                    'errors'     => ['sku' => 'SKU already exists. Please use a unique SKU.'],
-                    'product'    => array_merge($existingProduct, $data),
-                    'categories' => $this->categoryModel->all() ?: [],
-                    'title'      => 'Edit Product',
-                ]);
-                return;
-            }
-
-            $imagePath = $existingProduct['image_path'] ?? null;
-            $hasNewImage = isset($_FILES['image']) && !empty($_FILES['image']['name']);
-
-            if ($hasNewImage) {
-                $uploadResult = FileUploadHelper::uploadProductImage($_FILES['image']);
-
-                if (!$uploadResult['success']) {
-                    $this->view('products/edit', [
-                        'errors'     => ['image' => $uploadResult['error'] ?? 'Image upload failed.'],
-                        'product'    => array_merge($existingProduct, $data),
-                        'categories' => $this->categoryModel->all() ?: [],
-                        'title'      => 'Edit Product',
-                    ]);
-                    return;
-                }
-
-                if (!empty($uploadResult['path'])) {
-                    FileUploadHelper::deleteProductImage($existingProduct['image_path'] ?? null);
-                    $imagePath = $uploadResult['path'];
-                }
-            }
-
-            $this->productModel->updateById($productId, [
+            // Prepare validated data array for the model
+            $updateData = [
                 'product_name'        => $data['product_name'],
-                'sku'                 => $sku,
+                'sku'                 => $data['sku'],
                 'description'         => $data['description'] ?? null,
-                'status'              => $data['status'] ?? 'active',
                 'category_id'         => (int) $data['category_id'],
                 'price'               => (float) $data['price'],
                 'stock_quantity'      => (int) $data['stock_quantity'],
                 'low_stock_threshold' => (int) $data['low_stock_threshold'],
-                'image_path'          => $imagePath,
-            ]);
+                'status'              => $data['status'] ?? 'active' // This will save 'inactive' properly
+            ];
 
-            $this->redirect('/products?success=updated');
-            return;
+            // Use the new model method to update all fields
+            if ($this->productModel->updateProduct((int)$id, $updateData)) {
+                $this->redirect('/products?success=updated');
+            } else {
+                // Redirect on failure without full crash
+                $this->redirect('/products');
+            }
+
         } catch (Throwable $e) {
-            $this->logError('ProductController@update', $e);
-            http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
+            $this->logError('Update Error', $e);
+            $this->view('errors/500');
         }
     }
 
     /**
-     * Soft delete product.
+     * Soft delete a product by ID.
+     *
+     * @param string $id
      */
     public function destroy(string $id): void
     {
         try {
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-                $this->redirect('/products');
-                return;
-            }
-
-            $product = $this->productModel->findById((int) $id);
-
-            if (!$product) {
-                $this->redirect('/products?error=not_found');
-                return;
-            }
-
             $this->productModel->delete((int) $id);
-
             $this->redirect('/products?success=deleted');
-            return;
+
         } catch (Throwable $e) {
-            $this->logError('ProductController@destroy', $e);
+            $this->logError('Destroy', $e);
             http_response_code(500);
-            $this->view('errors/500', ['title' => 'Internal Server Error']);
+            $this->view('errors/500');
+            exit;
         }
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\InventoryTransaction;
+use App\Helpers\FileUploadHelper;
 use Exception;
 
 /**
@@ -43,5 +44,50 @@ class ProductService
 
         // 2. Log this as a transaction for history/dashboard
         $this->transactionModel->log($productId, $type, $qty, $reason, $userId);
+    }
+
+    /**
+     * Handle business logic for creating a product
+     */
+    public function createProduct(array $data, array $file): string|false
+    {
+        // 1. Generate SKU if not provided (Business Logic)
+        $data['sku'] = !empty($data['sku']) ? $data['sku'] : 'SKU-' . strtoupper(bin2hex(random_bytes(4)));
+
+        // 2. Handle product image upload (Business Logic)
+        $upload = FileUploadHelper::uploadProductImage($file);
+        $data['image_path'] = $upload['success'] ? $upload['path'] : null;
+
+        // 3. Set audit data from session
+        $data['created_by'] = $_SESSION['user_id'] ?? 1;
+
+        // 4. Delegate database insertion to Model
+        return $this->productModel->create($data);
+    }
+
+    /**
+     * Handle business logic for updating a product including image replacement
+     */
+    public function updateProduct(int $id, array $data, array $file): bool
+    {
+        $existingProduct = $this->productModel->findById($id);
+        if (!$existingProduct) {
+            throw new Exception("Product not found.");
+        }
+
+        // Handle Image Update Logic
+        if (!empty($file['name'])) {
+            $upload = FileUploadHelper::uploadProductImage($file);
+            if ($upload['success']) {
+                // Delete old image if a new one is uploaded successfully
+                FileUploadHelper::deleteProductImage($existingProduct['image_path']);
+                $data['image_path'] = $upload['path'];
+            }
+        } else {
+            // Keep existing image if no new file is uploaded
+            $data['image_path'] = $existingProduct['image_path'];
+        }
+
+        return $this->productModel->updateProduct($id, $data);
     }
 }
