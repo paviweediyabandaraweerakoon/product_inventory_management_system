@@ -3,7 +3,7 @@
  * @var array|null $_SESSION['errors'] Server-side validation messages (Captured in CategoryController)
  * @var array|null $_SESSION['old'] Previously submitted data to keep the form populated
  */
-include __DIR__ . '/../layouts/header.php'; 
+ob_start();
 
 // Extract session data and clear them immediately (Flash Messages pattern)
 $errors = $_SESSION['errors'] ?? [];
@@ -99,4 +99,7 @@ $(document).ready(function() {
 });
 </script>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php
+$content = ob_get_clean();
+include __DIR__ . '/../layouts/main.php';
+?>
