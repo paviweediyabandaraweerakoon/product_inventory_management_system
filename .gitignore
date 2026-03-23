@@ -4,6 +4,36 @@
 
 # Environment Files
 .env
+# Dependency Directories
+/vendor/
+/node_modules/
+
+# Environment Files
+.env
+.env.local
+.env.*.local
+
+# Logs
+storage/logs/
+*.log
+
+# Uploads & Temp Files
+storage/uploads/
+/public/uploads/
+.temp/
+.tmp/
+
+# Package Lock Files
+package-lock.json
+composer.lock
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# IDE Specific Files (VS Code / PHPStorm)
+.vscode/
+.idea/
 
 # Logs
 storage/logs/
