@@ -52,6 +52,10 @@ class AuthService
             return $this->failureResponse('Invalid email or password.');
         }
 
+        if (isset($user['status']) && $user['status'] !== 'active') {
+            return $this->failureResponse('Your account is deactivated. Please contact support.');
+            }
+
         $accountValidation = $this->validateUserAccountState($user);
         if ($accountValidation !== null) {
             return $accountValidation;
