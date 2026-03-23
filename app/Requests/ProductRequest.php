@@ -4,24 +4,30 @@ namespace App\Requests;
 
 /**
  * Class ProductRequest
- * Validates product-related request data before storing/updating in DB.
+ *
+ * Responsibility:
+ * Validate product input data only.
  */
 class ProductRequest
 {
     /**
-     * @var array<string,string> Validation errors
+     * Validation errors.
+     *
+     * @var array<string,string>
      */
     protected array $errors = [];
 
     /**
-     * @var array<string,mixed> Form data
+     * Form data.
+     *
+     * @var array<string,mixed>
      */
     protected array $data = [];
 
     /**
      * ProductRequest constructor.
      *
-     * @param array<string,mixed> $data
+     * @param array<string,mixed> $data Request payload
      */
     public function __construct(array $data)
     {
@@ -29,34 +35,69 @@ class ProductRequest
     }
 
     /**
-     * Validate request data according to rules.
+     * Validate product data for create/update actions.
      *
-     * @return bool True if valid, false if errors exist
+     * @param bool $isUpdate Whether validation is for update action
+     *
+     * @return bool
      */
-    public function validate(): bool
+    public function validate(bool $isUpdate = false): bool
     {
-        $this->errors = []; // Reset errors
+        $this->errors = [];
 
-        // 1. Product Name
-        if (empty($this->data['product_name'])) {
+        $productName = trim((string) ($this->data['product_name'] ?? ''));
+        $sku = trim((string) ($this->data['sku'] ?? ''));
+        $description = trim((string) ($this->data['description'] ?? ''));
+        $status = strtolower(trim((string) ($this->data['status'] ?? 'active')));
+        $categoryId = $this->data['category_id'] ?? null;
+        $price = $this->data['price'] ?? null;
+        $stockQuantity = $this->data['stock_quantity'] ?? null;
+        $lowStockThreshold = $this->data['low_stock_threshold'] ?? null;
+
+        // Product Name
+        if ($productName === '') {
             $this->errors['product_name'] = 'Product name is required.';
-        } elseif (strlen($this->data['product_name']) > 255) {
+        } elseif (mb_strlen($productName) > 255) {
             $this->errors['product_name'] = 'Product name cannot exceed 255 characters.';
         }
 
-        // 2. Category ID
-        if (empty($this->data['category_id']) || !is_numeric($this->data['category_id'])) {
+        // SKU (optional, but validate format if provided)
+        if ($sku !== '') {
+            if (mb_strlen($sku) > 100) {
+                $this->errors['sku'] = 'SKU cannot exceed 100 characters.';
+            } elseif (!preg_match('/^[A-Za-z0-9\-_]+$/', $sku)) {
+                $this->errors['sku'] = 'SKU may contain only letters, numbers, hyphens, and underscores.';
+            }
+        }
+
+        // Description
+        if ($description !== '' && mb_strlen($description) > 2000) {
+            $this->errors['description'] = 'Description cannot exceed 2000 characters.';
+        }
+
+        // Category ID
+        if ($categoryId === null || $categoryId === '' || !ctype_digit((string) $categoryId) || (int) $categoryId <= 0) {
             $this->errors['category_id'] = 'Please select a valid category.';
         }
 
-        // 3. Price
-        if (!isset($this->data['price']) || !is_numeric($this->data['price']) || (float)$this->data['price'] < 0) {
-            $this->errors['price'] = 'Please enter a valid positive price.';
+        // Price
+        if ($price === null || $price === '' || !is_numeric($price) || (float) $price < 0) {
+            $this->errors['price'] = 'Please enter a valid non-negative price.';
         }
 
-        // 4. Stock Quantity
-        if (!isset($this->data['stock_quantity']) || !is_numeric($this->data['stock_quantity']) || (int)$this->data['stock_quantity'] < 0) {
-            $this->errors['stock_quantity'] = 'Stock quantity must be a non-negative number.';
+        // Stock Quantity
+        if ($stockQuantity === null || $stockQuantity === '' || !ctype_digit((string) $stockQuantity)) {
+            $this->errors['stock_quantity'] = 'Stock quantity must be a non-negative whole number.';
+        }
+
+        // Low Stock Threshold
+        if ($lowStockThreshold === null || $lowStockThreshold === '' || !ctype_digit((string) $lowStockThreshold)) {
+            $this->errors['low_stock_threshold'] = 'Low stock threshold must be a non-negative whole number.';
+        }
+
+        // Status
+        if (!in_array($status, ['active', 'inactive'], true)) {
+            $this->errors['status'] = 'Please select a valid status.';
         }
 
         return empty($this->errors);

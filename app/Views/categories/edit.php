@@ -1,4 +1,4 @@
-<?php include __DIR__ . '/../layouts/header.php'; ?>
+<?php ob_start(); ?>
 
 <div class="max-w-xl mx-auto py-8 px-4">
     <div class="flex items-center gap-4 mb-8">
@@ -61,4 +61,7 @@ $(document).ready(function() {
 });
 </script>
 
-<?php include __DIR__ . '/../layouts/footer.php'; ?>
+<?php
+$content = ob_get_clean();
+include __DIR__ . '/../layouts/main.php';
+?>
