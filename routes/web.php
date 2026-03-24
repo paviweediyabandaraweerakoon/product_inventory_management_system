@@ -1,9 +1,8 @@
 <?php
-
-use App\Core\Router;
-use App\Controllers\DashboardController;
-use App\Controllers\CategoryController;
 use App\Controllers\ProductController;
+use App\Controllers\DashboardController;
+use App\Core\Router;
+use App\Controllers\CategoryController;
 use App\Controllers\AuthController;
 
 /**
@@ -66,3 +65,4 @@ $router->post('/products/delete/{id}', [ProductController::class, 'destroy']);
  * Return the configured router instance to the application lifecycle.
  */
 return $router;
+        
