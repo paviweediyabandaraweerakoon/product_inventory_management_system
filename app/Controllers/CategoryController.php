@@ -70,7 +70,8 @@ class CategoryController extends Controller
 
         try {
             // Assign and sanitize data in a single step
-            $data = array_map(fn($v) => htmlspecialchars(trim((string)$v)), $_POST);
+    
+            $data = $this->getPostData();
             
             $request = new CategoryRequest();
 

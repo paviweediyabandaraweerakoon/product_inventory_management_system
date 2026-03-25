@@ -7,7 +7,7 @@ use PDO;
 
 /**
  * Class Product
- * Standard database interactions for the products table.
+ * Handles standard database interactions for the products table.
  */
 class Product extends Model
 {
@@ -18,7 +18,8 @@ class Product extends Model
      */
     public function all(): array
     {
-        $sql = "SELECT p.*, c.category_name
+        $sql = "SELECT p.*, c.category_name,
+                       (p.stock_quantity <= p.low_stock_threshold) AS is_low_stock
                 FROM {$this->table} p
                 LEFT JOIN categories c
                     ON p.category_id = c.id
@@ -32,7 +33,7 @@ class Product extends Model
     /**
      * Find specific product by ID.
      */
-    public function findById(int $id): array|false
+    public function find(int $id): array|false
     {
         $sql = "SELECT *
                 FROM {$this->table}
@@ -56,6 +57,29 @@ class Product extends Model
     }
 
     /**
+     * Update an existing product record, including status and other details.
+     */
+    public function updateProduct(int $id, array $data): bool
+    {
+        $sql = "UPDATE {$this->table}
+                SET product_name = :product_name,
+                    sku = :sku,
+                    description = :description,
+                    category_id = :category_id,
+                    price = :price,
+                    stock_quantity = :stock_quantity,
+                    low_stock_threshold = :low_stock_threshold,
+                    status = :status,
+                    updated_at = NOW()
+                WHERE id = :id AND deleted_at IS NULL";
+
+        // Bind the product ID for the WHERE clause
+        $data['id'] = $id;
+
+        return $this->query($sql, $data)->rowCount() > 0;
+    }
+
+    /**
      * Count active (non-deleted) products.
      */
     public function countActiveRecords(): int
@@ -71,15 +95,15 @@ class Product extends Model
     /**
      * Count low stock active products using configurable threshold.
      */
-    public function countLowStockProducts(int $threshold): int
+    public function countLowStockProducts(): int
     {
         $sql = "SELECT COUNT(*)
                 FROM {$this->table}
-                WHERE stock_quantity <= ?
+                WHERE stock_quantity <= low_stock_threshold
                   AND status = 'active'
                   AND deleted_at IS NULL";
 
-        return (int) $this->query($sql, [$threshold])->fetchColumn();
+        return (int) $this->query($sql)->fetchColumn();
     }
 
     /**
@@ -149,12 +173,14 @@ class Product extends Model
     /**
      * Create new product record.
      */
-    public function create(array $data): string|false
+    public function create(array $data): string
     {
         $sql = "INSERT INTO {$this->table}
-                    (product_name, category_id, price, stock_quantity, status, created_at)
+                    (product_name, sku, description, category_id, price, stock_quantity, 
+                     low_stock_threshold, status, image_path, created_by, created_at)
                 VALUES
-                    (:product_name, :category_id, :price, :stock_quantity, :status, NOW())";
+                    (:product_name, :sku, :description, :category_id, :price, :stock_quantity, 
+                     :low_stock_threshold, :status, :image_path, :created_by, NOW())";
 
         $this->query($sql, $data);
 

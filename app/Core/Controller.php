@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Core;
 
 use App\Core\Env;
@@ -48,6 +47,16 @@ class Controller
 
         http_response_code(500);
         die('Error: View file not found.');
+    }
+
+    /**
+     * Reusable helper for sanitizing POST data
+     */
+    protected function getPostData(): array
+    {
+        return array_map(function($value) {
+            return is_string($value) ? htmlspecialchars(trim($value)) : $value;
+        }, $_POST);
     }
 
     /**

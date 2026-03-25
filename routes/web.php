@@ -65,4 +65,3 @@ $router->post('/products/delete/{id}', [ProductController::class, 'destroy']);
  * Return the configured router instance to the application lifecycle.
  */
 return $router;
-        

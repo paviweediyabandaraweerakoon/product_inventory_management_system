@@ -6,6 +6,7 @@ use App\Core\Controller;
 use App\Models\Category;
 use App\Models\Product;
 use App\Requests\ProductRequest;
+use App\Services\ProductService;
 use Throwable;
 
 /**
@@ -77,12 +78,8 @@ class ProductController extends Controller
                 return;
             }
 
-            // Trim all scalar inputs
-            $data = array_map(
-                fn ($value) => is_scalar($value) ? trim((string) $value) : '',
-                $_POST
-            );
-
+            $data = $this->getPostData();
+            
             $request = new ProductRequest($data);
 
             if (!$request->validate()) {
@@ -94,15 +91,12 @@ class ProductController extends Controller
                 return;
             }
 
-            $this->productModel->create([
-                'product_name'   => $data['product_name'],
-                'category_id'    => (int) $data['category_id'],
-                'price'          => (float) $data['price'],
-                'stock_quantity' => (int) $data['stock_quantity'],
-                'status'         => 'active',
-            ]);
-
-            $this->redirect('/products?success=created');
+            $productService = new ProductService();
+            if ($productService->createProduct($data, $_FILES['image'] ?? [])) {
+                $this->redirect('/products?success=created');
+            } else {
+                throw new \Exception("Could not create product.");
+            }
 
         } catch (Throwable $e) {
             $this->logError('Store', $e);
@@ -113,14 +107,105 @@ class ProductController extends Controller
     }
 
     /**
-     * Soft delete a product by ID.
+     * Show the form for editing the specified product.
      *
-     * @param string $id
+     * @param int $id
      */
-    public function destroy(string $id): void
+    public function edit(int $id): void
     {
         try {
-            $this->productModel->delete((int) $id);
+            $product = $this->productModel->find($id);
+            if (!$product) {
+                $this->redirect('/products?error=not_found');
+                return;
+            }
+
+            $this->view('products/edit', [
+                'product'    => $product,
+                'categories' => $this->categoryModel->all(),
+                'title'      => 'Edit Product',
+            ]);
+        } catch (Throwable $e) {
+            $this->logError('Edit View', $e);
+            http_response_code(500);
+            $this->view('errors/500');
+            exit;
+        }
+    }
+
+    /**
+     * Update the specified product in storage.
+     * 
+     * @param int $id
+     */
+    public function update(int $id): void
+    {
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                $this->redirect('/products');
+                return;
+            }
+
+            // Sanitization via array_map to ensure all inputs are trimmed and safe for validation
+           $data = $this->getPostData();
+
+            $request = new ProductRequest($data);
+
+            // Validate in update mode (pass true)
+            if (!$request->validate(true)) {
+                $this->view('products/edit', [
+                    'errors'     => $request->getErrors(),
+                    'categories' => $this->categoryModel->all(),
+                    // Pass current ID with the input data to retain state on error
+                    'product'    => array_merge(['id' => $id], $data),
+                ]);
+                return;
+            }
+
+            // Prepare validated data array for the model
+            $updateData = [
+                'product_name'        => $data['product_name'],
+                'sku'                 => $data['sku'],
+                'description'         => $data['description'] ?? null,
+                'category_id'         => (int) $data['category_id'],
+                'price'               => (float) $data['price'],
+                'stock_quantity'      => (int) $data['stock_quantity'],
+                'low_stock_threshold' => (int) $data['low_stock_threshold'],
+                'status'              => $data['status'] ?? 'active' // This will save 'inactive' properly
+            ];
+
+            // Use the new model method to update all fields
+            if ($this->productModel->updateProduct($id, $updateData)) {
+                $this->redirect('/products?success=updated');
+            } else {
+                // Redirect on failure without full crash
+                error_log('Product update failed for ID: ' . $id);
+                $this->redirect('/products?error=update_failed');
+            }
+
+        } catch (Throwable $e) {
+            $this->logError('Update Error', $e);
+            http_response_code(500);
+            $this->view('errors/500');
+            exit;
+        }
+    }
+
+    /**
+     * Soft delete a product by ID.
+     *
+     * @param int $id
+     */
+    public function destroy(int $id): void
+    {
+        try {
+            $product = $this->productModel->find($id);
+            if (!$product) {
+                $this->redirect('/products?error=not_found');
+                return;
+            }
+
+            $this->productModel->delete($id);
             $this->redirect('/products?success=deleted');
 
         } catch (Throwable $e) {

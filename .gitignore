@@ -41,7 +41,8 @@ storage/logs/
 
 # Uploads & Temp Files
 storage/uploads/
-/public/uploads/
+/public/uploads/*
+!/public/uploads/.gitkeep
 .temp/
 .tmp/
 

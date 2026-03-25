@@ -47,7 +47,7 @@ class DashboardController extends Controller
             [$salesLabels, $salesData] = $this->buildSalesSeries($salesResults, $reportMonths);
 
             // 3. Summary metrics
-            $lowStockCount = $this->productModel->countLowStockProducts($lowStockThreshold);
+            $lowStockCount = $this->productModel->countLowStockProducts();
             $totalValue = $this->productModel->getTotalInventoryValue();
 
             // 4. Recent live activity + recent products
