@@ -50,10 +50,9 @@ class FileUploadHelper
         $newFileName = uniqid('product_', true) . '.' . $safeExtension;
 
         //  Get upload directory from Environment variables instead of hardcoding
-        $baseDir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR;
-        $relativeUploadPath = Env::get('UPLOAD_PATH', 'public/uploads/products/');
-        $uploadDir = $baseDir . ltrim($relativeUploadPath, '/');
-
+        $baseDir = dirname(__DIR__, 2);
+        $relativeUploadPath = trim(Env::get('UPLOAD_PATH', 'public/uploads/products'), '/');
+        $uploadDir = $baseDir . DIRECTORY_SEPARATOR . $relativeUploadPath . DIRECTORY_SEPARATOR;
         if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
             error_log('[FileUploadHelper] Failed to create upload directory: ' . $uploadDir);
             return ['success' => false, 'error' => 'Unable to prepare image upload directory.'];
@@ -79,9 +78,9 @@ class FileUploadHelper
         }
 
         //  Use the same dynamic path for deletion
-        $baseDir = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR;
-        $relativeUploadPath = Env::get('UPLOAD_PATH', 'public/uploads/products/');
-        $filePath = $baseDir . ltrim($relativeUploadPath, '/') . basename($fileName);
+        $baseDir = dirname(__DIR__, 2);
+        $relativeUploadPath = trim(Env::get('UPLOAD_PATH', 'public/uploads/products'), '/');
+        $filePath = $baseDir . DIRECTORY_SEPARATOR . $relativeUploadPath . DIRECTORY_SEPARATOR . basename($fileName);
 
         if (is_file($filePath)) {
             @unlink($filePath);

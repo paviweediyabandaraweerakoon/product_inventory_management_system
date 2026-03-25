@@ -78,11 +78,8 @@ class ProductController extends Controller
                 return;
             }
 
-            $data = array_map(
-                fn ($value) => is_scalar($value) ? trim((string) $value) : '',
-                $_POST
-            );
-
+            $data = $this->getPostData();
+            
             $request = new ProductRequest($data);
 
             if (!$request->validate()) {
@@ -112,12 +109,12 @@ class ProductController extends Controller
     /**
      * Show the form for editing the specified product.
      *
-     * @param string $id
+     * @param int $id
      */
-    public function edit(string $id): void
+    public function edit(int $id): void
     {
         try {
-            $product = $this->productModel->findById((int) $id);
+            $product = $this->productModel->find($id);
             if (!$product) {
                 $this->redirect('/products?error=not_found');
                 return;
@@ -130,18 +127,18 @@ class ProductController extends Controller
             ]);
         } catch (Throwable $e) {
             $this->logError('Edit View', $e);
+            http_response_code(500);
             $this->view('errors/500');
+            exit;
         }
     }
 
     /**
      * Update the specified product in storage.
-     * * @param string $id
+     * 
+     * @param int $id
      */
-    /**
-     * Update the specified product in storage.
-     */
-    public function update(string $id): void
+    public function update(int $id): void
     {
         try {
             if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -150,10 +147,7 @@ class ProductController extends Controller
             }
 
             // Sanitization via array_map to ensure all inputs are trimmed and safe for validation
-            $data = array_map(
-                fn ($value) => is_scalar($value) ? trim((string) $value) : '',
-                $_POST
-            );
+           $data = $this->getPostData();
 
             $request = new ProductRequest($data);
 
@@ -181,28 +175,37 @@ class ProductController extends Controller
             ];
 
             // Use the new model method to update all fields
-            if ($this->productModel->updateProduct((int)$id, $updateData)) {
+            if ($this->productModel->updateProduct($id, $updateData)) {
                 $this->redirect('/products?success=updated');
             } else {
                 // Redirect on failure without full crash
-                $this->redirect('/products');
+                error_log('Product update failed for ID: ' . $id);
+                $this->redirect('/products?error=update_failed');
             }
 
         } catch (Throwable $e) {
             $this->logError('Update Error', $e);
+            http_response_code(500);
             $this->view('errors/500');
+            exit;
         }
     }
 
     /**
      * Soft delete a product by ID.
      *
-     * @param string $id
+     * @param int $id
      */
-    public function destroy(string $id): void
+    public function destroy(int $id): void
     {
         try {
-            $this->productModel->delete((int) $id);
+            $product = $this->productModel->find($id);
+            if (!$product) {
+                $this->redirect('/products?error=not_found');
+                return;
+            }
+
+            $this->productModel->delete($id);
             $this->redirect('/products?success=deleted');
 
         } catch (Throwable $e) {
