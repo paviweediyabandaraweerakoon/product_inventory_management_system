@@ -4,6 +4,7 @@ use App\Controllers\DashboardController;
 use App\Core\Router;
 use App\Controllers\CategoryController;
 use App\Controllers\AuthController;
+use App\Controllers\UserController;
 
 /**
  * Global Router Instance
@@ -64,4 +65,20 @@ $router->post('/products/delete/{id}', [ProductController::class, 'destroy']);
 /**
  * Return the configured router instance to the application lifecycle.
  */
+
+// --- User Management Routes ---
+/**
+ * Standard RESTful naming conventions for User CRUD.
+ */
+$router->get('/users', [UserController::class, 'index']);
+$router->get('/users/create', [UserController::class, 'create']);
+$router->post('/users/store', [UserController::class, 'store']);
+$router->get('/users/edit/{id}', [UserController::class, 'edit']);
+$router->post('/users/update/{id}', [UserController::class, 'update']);
+
+/**
+ * Using POST for delete for security (Soft Delete).
+ */
+$router->post('/users/delete/{id}', [UserController::class, 'delete']);
+
 return $router;

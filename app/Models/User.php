@@ -190,4 +190,68 @@ class User extends Model
 
         return $stmt->rowCount() > 0;
     }
+
+    /**
+     * Get all users with their role names (for admin listing).
+     */
+    public function getAllUsers(): array
+    {
+        $sql = "SELECT u.*, r.role_name 
+                FROM users u 
+                LEFT JOIN roles r ON u.role_id = r.id 
+                WHERE u.deleted_at IS NULL 
+                ORDER BY u.created_at DESC";
+        return $this->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Find a user by ID.
+     */
+    public function find(int $id): array|false
+    {
+        $sql = "SELECT * FROM users WHERE id = :id AND deleted_at IS NULL LIMIT 1";
+        return $this->query($sql, ['id' => $id])->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Update user details (admin function).
+     */
+    public function updateUser(int $id, array $data): bool
+    {
+        $sql = "UPDATE users SET 
+                    first_name = :first_name,
+                    last_name = :last_name,
+                    email = :email,
+                    role_id = :role_id,
+                    status = :status,
+                    updated_at = NOW()
+                WHERE id = :id AND deleted_at IS NULL";
+
+        // Add the ID to the data array for binding
+        $data['id'] = $id;
+        return $this->query($sql, $data)->rowCount() > 0;
+    }
+
+    /**
+     * Soft delete a user (mark as deleted without removing from database).
+     */
+    public function deleteUser(int $id): bool
+    {
+        $sql = "UPDATE users SET deleted_at = NOW() WHERE id = :id";
+        return $this->query($sql, ['id' => $id])->rowCount() > 0;
+    }
+
+    /**
+     * Password Reset Token Management
+     */
+    public function updateResetToken(int $id, string $token, string $expiry): bool
+    {
+        $sql = "UPDATE users SET 
+                    reset_token = :token, 
+                    reset_token_expiry = :expiry, 
+                    updated_at = NOW() 
+                WHERE id = :id";
+        return $this->query($sql, ['token' => $token, 'expiry' => $expiry, 'id' => $id])->rowCount() > 0;
+    }
+
 }
