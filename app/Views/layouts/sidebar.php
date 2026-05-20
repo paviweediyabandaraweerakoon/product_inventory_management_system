@@ -25,6 +25,11 @@
             <i data-lucide="layers" class="size-5 <?= str_contains($current_uri, '/categories') ? 'text-white' : 'group-hover:text-blue-400' ?>"></i>
             <span class="font-medium">Categories</span>
         </a>
+
+        <a href="/users" class="flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-all group <?= str_contains($current_uri, '/users') ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'hover:bg-slate-800 hover:text-white' ?>">
+            <i data-lucide="users" class="size-5 <?= str_contains($current_uri, '/users') ? 'text-white' : 'group-hover:text-blue-400' ?>"></i>
+            <span class="font-medium">Users</span>
+        </a>
     </nav>
 
     <div class="p-4 border-t border-slate-800 mb-4">

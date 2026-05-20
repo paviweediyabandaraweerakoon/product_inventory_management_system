@@ -2,20 +2,46 @@
 
 ob_start();
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$csrfToken = \App\Helpers\SecurityHelper::generateCsrfToken();
 $currency = \App\Core\Env::get('APP_CURRENCY', 'LKR');
 ?>
 
 <div class="space-y-6">
+    <?php if (!empty($importTelemetry)): ?>
+        <div class="mb-4 rounded-xl border border-green-100 bg-green-50 p-4 text-green-800">
+            <p class="font-bold">CSV Import Completed Successfully!</p>
+            <ul class="mt-1 text-sm list-disc pl-5">
+                <li>Processed: <?= htmlspecialchars((string) ($importTelemetry['processed'] ?? 0), ENT_QUOTES, 'UTF-8') ?> products</li>
+                <li>Skipped: <?= htmlspecialchars((string) ($importTelemetry['skipped'] ?? 0), ENT_QUOTES, 'UTF-8') ?> rows</li>
+            </ul>
+        </div>
+    <?php endif; ?>
+
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">Product Inventory</h1>
             <p class="text-sm text-gray-500">Manage your products, stock levels and pricing</p>
         </div>
 
-        <a href="/products/create" class="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white shadow-lg shadow-blue-100 transition-all hover:bg-blue-700">
-            <i data-lucide="plus" class="h-5 w-5"></i>
-            Add Product
-        </a>
+        <div class="flex items-center gap-2">
+            <form action="/products/import" method="POST" enctype="multipart/form-data" class="relative">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                <input id="csv_file" type="file" name="csv_file" accept=".csv" required class="hidden" onchange="this.form.submit();">
+                <label for="csv_file" class="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 shadow-sm transition-all hover:bg-gray-50 cursor-pointer">
+                    <i data-lucide="upload-cloud" class="size-4"></i>
+                    Import
+                </label>
+            </form>
+
+            <a href="/products/create" class="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white shadow-lg shadow-blue-100 transition-all hover:bg-blue-700">
+                <i data-lucide="plus" class="h-5 w-5"></i>
+                Add Product
+            </a>
+        </div>
     </div>
 
     <div class="flex flex-col items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm md:flex-row">
@@ -114,6 +140,7 @@ $currency = \App\Core\Env::get('APP_CURRENCY', 'LKR');
                                         </a>
 
                                         <form action="/products/delete/<?= (int) ($product['id'] ?? 0) ?>" method="POST" onsubmit="return confirm('Are you sure you want to delete this product?')" class="inline">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                                             <button type="submit" class="rounded-lg border border-transparent p-2 text-red-600 transition-colors hover:border-red-100 hover:bg-red-50">
                                                 <i data-lucide="trash-2" class="h-4 w-4"></i>
                                             </button>
