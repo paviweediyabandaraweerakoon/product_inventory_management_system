@@ -44,6 +44,19 @@ class Product extends Model
     }
 
     /**
+     * Find a specific product by SKU.
+     */
+    public function findBySku(string $sku): array|false
+    {
+        $sql = "SELECT *
+                FROM {$this->table}
+                WHERE sku = ?
+                  AND deleted_at IS NULL";
+
+        return $this->query($sql, [$sku])->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Update stock level only.
      */
     public function updateStock(int $id, int $newStock): bool
@@ -61,22 +74,26 @@ class Product extends Model
      */
     public function updateProduct(int $id, array $data): bool
     {
+        if (empty($data)) {
+            return false;
+        }
+
+        $fields = [];
+        $params = [];
+
+        foreach ($data as $key => $value) {
+            $fields[] = "{$key} = :{$key}";
+            $params[$key] = $value;
+        }
+
+        $fields[] = 'updated_at = NOW()';
+        $params['id'] = $id;
+
         $sql = "UPDATE {$this->table}
-                SET product_name = :product_name,
-                    sku = :sku,
-                    description = :description,
-                    category_id = :category_id,
-                    price = :price,
-                    stock_quantity = :stock_quantity,
-                    low_stock_threshold = :low_stock_threshold,
-                    status = :status,
-                    updated_at = NOW()
+                SET " . implode(', ', $fields) . "
                 WHERE id = :id AND deleted_at IS NULL";
 
-        // Bind the product ID for the WHERE clause
-        $data['id'] = $id;
-
-        return $this->query($sql, $data)->rowCount() > 0;
+        return $this->query($sql, $params)->rowCount() > 0;
     }
 
     /**

@@ -7,7 +7,9 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Requests\ProductRequest;
 use App\Services\ProductService;
+use App\Services\ProductImportService;
 use Throwable;
+use Exception;
 
 /**
  * Class ProductController
@@ -18,12 +20,22 @@ class ProductController extends Controller
 {
     private Product $productModel;
     private Category $categoryModel;
+    private ProductService $productService;
+    private ProductImportService $productImportService;
 
     public function __construct()
     {
         parent::__construct();
+        
+        // Dynamic Global Session Lifecycle Lock (Centralized Management)
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
         $this->productModel = new Product();
         $this->categoryModel = new Category();
+        $this->productService = new ProductService();
+        $this->productImportService = new ProductImportService();
     }
 
     /**
@@ -32,11 +44,18 @@ class ProductController extends Controller
     public function index(): void
     {
         try {
+            $importTelemetry = null;
+            if (isset($_GET['import_status'], $_SESSION['import_telemetry']) && $_GET['import_status'] === 'success') {
+                $importTelemetry = $_SESSION['import_telemetry'];
+                unset($_SESSION['import_telemetry']);
+            }
+
             $products = $this->productModel->all();
 
             $this->view('products/index', [
-                'products' => $products,
-                'title'    => 'Product List',
+                'products'        => $products,
+                'title'           => 'Product List',
+                'importTelemetry' => $importTelemetry,
             ]);
 
         } catch (Throwable $e) {
@@ -79,7 +98,6 @@ class ProductController extends Controller
             }
 
             $data = $this->getPostData();
-            
             $request = new ProductRequest($data);
 
             if (!$request->validate()) {
@@ -91,11 +109,10 @@ class ProductController extends Controller
                 return;
             }
 
-            $productService = new ProductService();
-            if ($productService->createProduct($data, $_FILES['image'] ?? [])) {
+            if ($this->productService->createProduct($data, $_FILES['image'] ?? [])) {
                 $this->redirect('/products?success=created');
             } else {
-                throw new \Exception("Could not create product.");
+                throw new Exception("Could not create product.");
             }
 
         } catch (Throwable $e) {
@@ -135,8 +152,7 @@ class ProductController extends Controller
 
     /**
      * Update the specified product in storage.
-     * 
-     * @param int $id
+     * * @param int $id
      */
     public function update(int $id): void
     {
@@ -146,39 +162,21 @@ class ProductController extends Controller
                 return;
             }
 
-            // Sanitization via array_map to ensure all inputs are trimmed and safe for validation
-           $data = $this->getPostData();
-
+            $data = $this->getPostData();
             $request = new ProductRequest($data);
 
-            // Validate in update mode (pass true)
             if (!$request->validate(true)) {
                 $this->view('products/edit', [
                     'errors'     => $request->getErrors(),
                     'categories' => $this->categoryModel->all(),
-                    // Pass current ID with the input data to retain state on error
                     'product'    => array_merge(['id' => $id], $data),
                 ]);
                 return;
             }
 
-            // Prepare validated data array for the model
-            $updateData = [
-                'product_name'        => $data['product_name'],
-                'sku'                 => $data['sku'],
-                'description'         => $data['description'] ?? null,
-                'category_id'         => (int) $data['category_id'],
-                'price'               => (float) $data['price'],
-                'stock_quantity'      => (int) $data['stock_quantity'],
-                'low_stock_threshold' => (int) $data['low_stock_threshold'],
-                'status'              => $data['status'] ?? 'active' // This will save 'inactive' properly
-            ];
-
-            // Use the new model method to update all fields
-            if ($this->productModel->updateProduct($id, $updateData)) {
+            if ($this->productService->updateProduct($id, $data)) {
                 $this->redirect('/products?success=updated');
             } else {
-                // Redirect on failure without full crash
                 error_log('Product update failed for ID: ' . $id);
                 $this->redirect('/products?error=update_failed');
             }
@@ -213,6 +211,41 @@ class ProductController extends Controller
             http_response_code(500);
             $this->view('errors/500');
             exit;
+        }
+    }
+
+    /**
+     * Bulk Ingestion Framework with Schema Lock & Robust Boundaries
+     */
+    public function import(): void
+    {
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                $this->redirect('/products');
+                return;
+            }
+
+            $fileData = $_FILES['csv_file'] ?? [];
+            if (empty($fileData) || $fileData['error'] !== UPLOAD_ERR_OK) {
+                $this->redirect('/products?error=upload_failed');
+                return;
+            }
+
+            $currentUserId = $_SESSION['user_id'] ?? 1;
+
+            // Process the CSV and ingest products, capturing metrics for telemetry
+            $metrics = $this->productImportService->importProductsFromCsv($fileData, $currentUserId);
+
+            $_SESSION['import_telemetry'] = [
+                'processed' => $metrics['success'],
+                'skipped'   => $metrics['skipped']
+            ];
+
+            $this->redirect("/products?import_status=success");
+
+        } catch (Throwable $e) {
+            error_log('Bulk Import Ingestion Fault: ' . $e->getMessage());
+            $this->redirect('/products?error=ingestion_runtime_fault');
         }
     }
 }

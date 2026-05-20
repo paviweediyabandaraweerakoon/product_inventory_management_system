@@ -56,6 +56,7 @@ $router->get('/products/create', [ProductController::class, 'create']);
 $router->post('/products/store', [ProductController::class, 'store']);
 $router->get('/products/edit/{id}', [ProductController::class, 'edit']);
 $router->post('/products/update/{id}', [ProductController::class, 'update']);
+$router->post('/products/import', [ProductController::class, 'import']);
 
 /**
  * Following REST principles: avoid using GET for state-changing actions like delete.

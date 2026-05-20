@@ -37,6 +37,30 @@ class Model
     }
 
     /**
+     * Begin a database transaction.
+     */
+    public function beginTransaction(): void
+    {
+        $this->db->beginTransaction();
+    }
+
+    /**
+     * Commit a database transaction.
+     */
+    public function commit(): void
+    {
+        $this->db->commit();
+    }
+
+    /**
+     * Roll back a database transaction.
+     */
+    public function rollBack(): void
+    {
+        $this->db->rollBack();
+    }
+
+    /**
      * Get all active records.
      */
     public function all(): array

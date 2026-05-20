@@ -27,7 +27,7 @@ class ProductService
      */
     public function adjustStock(int $productId, string $type, int $qty, string $reason, ?int $userId = null): void
     {
-        $product = $this->productModel->findById($productId);
+        $product = $this->productModel->find($productId);
         if (!$product) {
             throw new Exception("Product not found.");
         }
@@ -66,28 +66,30 @@ class ProductService
     }
 
     /**
-     * Handle business logic for updating a product including image replacement
+     * Update an existing product by handling data formatting and type-casting (SRP Compliant)
+     *
+     * @param int $id
+     * @param array $data Raw input data from the controller
+     * @return bool
      */
-    public function updateProduct(int $id, array $data, array $file): bool
+    public function updateProduct(int $id, array $data): bool
     {
-        $existingProduct = $this->productModel->findById($id);
+        $existingProduct = $this->productModel->find($id);
         if (!$existingProduct) {
             throw new Exception("Product not found.");
         }
 
-        // Handle Image Update Logic
-        if (!empty($file['name'])) {
-            $upload = FileUploadHelper::uploadProductImage($file);
-            if ($upload['success']) {
-                // Delete old image if a new one is uploaded successfully
-                FileUploadHelper::deleteProductImage($existingProduct['image_path']);
-                $data['image_path'] = $upload['path'];
-            }
-        } else {
-            // Keep existing image if no new file is uploaded
-            $data['image_path'] = $existingProduct['image_path'];
-        }
+        $updateData = [
+            'product_name'        => trim($data['product_name']),
+            'sku'                 => trim($data['sku']),
+            'description'         => !empty($data['description']) ? trim($data['description']) : null,
+            'category_id'         => (int) $data['category_id'],
+            'price'               => (float) $data['price'],
+            'stock_quantity'      => (int) $data['stock_quantity'],
+            'low_stock_threshold' => (int) $data['low_stock_threshold'],
+            'status'              => $data['status'] ?? 'active'
+        ];
 
-        return $this->productModel->updateProduct($id, $data);
+        return $this->productModel->updateProduct($id, $updateData);
     }
 }
